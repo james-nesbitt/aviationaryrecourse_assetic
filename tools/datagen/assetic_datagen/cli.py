@@ -15,6 +15,7 @@ from .generators import (
     generate_carrier_customers,
     generate_facilities,
     generate_operators,
+    generate_orders,
     generate_ownership_history,
     generate_routes,
     generate_staff,
@@ -33,6 +34,7 @@ DEFAULTS = {
     "customers": 10,
     "cargo": 80,
     "routes": 25,
+    "orders": 30,
 }
 
 
@@ -69,15 +71,18 @@ def cmd_generate(args: argparse.Namespace) -> int:
                     "facilities": _scale_count(args, "facilities"),
                     "customers": _scale_count(args, "customers"),
                     "cargo": _scale_count(args, "cargo"),
-                    "routes": _scale_count(args, "routes")}
+                    "routes": _scale_count(args, "routes"),
+                    "orders": _scale_count(args, "orders")}
     operators = generate_operators(rng, ids, pools, airports, counts["operators"], anchor, args.window_days)
     vehicles = generate_vehicles(rng, ids, pools, operators, models, airports, counts["vehicles"], anchor)
     ownership = generate_ownership_history(rng, vehicles, operators, anchor, args.window_days)
     staff = generate_staff(rng, ids, pools, operators, airports, counts["staff"], anchor, args.window_days)
     facilities = generate_facilities(rng, ids, operators, airports, counts["facilities"], anchor)
-    customers = generate_carrier_customers(rng, ids, pools, operators, counts["customers"], anchor, args.window_days)
+    account_managers = [s for s in staff if s["role"] == "account_manager"]
+    customers = generate_carrier_customers(rng, ids, pools, operators, account_managers, counts["customers"], anchor, args.window_days)
     cargo = generate_cargo(rng, ids, vehicles, operators, customers, airports, counts["cargo"], anchor, args.window_days)
     routes = generate_routes(rng, ids, vehicles, operators, airports, models, cargo, counts["routes"], anchor)
+    orders = generate_orders(rng, ids, pools, customers, routes, staff, None, airports, models, counts["orders"], anchor, args.window_days)
 
     files = [
         ("operators.jsonl", operators),
@@ -88,6 +93,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
         ("carrier_customers.jsonl", customers),
         ("cargo.jsonl", cargo),
         ("routes.jsonl", routes),
+        ("orders.jsonl", orders),
         ("airports.jsonl", airports),
         ("aircraft_models.jsonl", models),
     ]

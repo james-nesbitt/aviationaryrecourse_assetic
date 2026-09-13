@@ -10,13 +10,14 @@ only** — this tool is the sanctioned source of that data.
 ## Entities
 
 | File | Entities |
-| `routes.jsonl` | planned carrier travel routes (ordered legs, scheduled times) |
 | `operators.jsonl` | passenger/cargo/military airline operators |
+| `orders.jsonl` | customer orders: charter passenger groups and cargo bookings with multi-transit itineraries |
+| `routes.jsonl` | planned carrier travel routes (ordered legs, scheduled times) |
 | `vehicles.jsonl` | aircraft, ground support equipment, rail vehicles |
 | `ownership_history.jsonl` | sales/leases moving vehicles between operators |
-| `staff.jsonl` | flight crew and ground crew |
+| `staff.jsonl` | flight crew, ground crew, and management (account managers, trip managers) |
 | `facilities.jsonl` | hangars and warehouses |
-| `carrier_customers.jsonl` | shipping customers of cargo operators |
+| `carrier_customers.jsonl` | customers: cargo shippers and charter passenger-group clients, each with a responsible account manager |
 | `cargo.jsonl` | shipments with origin/destination and assigned vehicle |
 | `airports.jsonl` | the resolved airport reference set actually used |
 | `aircraft_models.jsonl` | the aircraft models actually referenced |
@@ -35,6 +36,25 @@ turnaround), and cargo-operator legs may reference an open shipment
 (`cargo_ref`) from `cargo.jsonl`. Military operators get no published
 routes.
 
+### Order semantics
+
+Each order is a customer request to move a passenger group (charter),
+freight, or both from an origin to a destination, possibly crossing
+multiple transits/flights. The itinerary (`planned_legs`) chains legs from
+routes published by the fulfilling operator when a temporally consistent,
+non-cyclic path exists (`transit_route_ids` records the contributing
+routes); otherwise a direct leg is planned on a plausible aircraft. Orders
+carry the responsible `account_manager_id` (the customer's assigned account
+manager) and `trip_manager_id` (the operator staff member who schedules
+passenger/cargo assignment to flights), matching the assetic ABAC model.
+Charter orders have a `passenger_group` (group name + pax count) and may
+carry `accompanying_cargo_kg`; cargo orders have a `freight` block.
+
+Staff generation includes management roles (~15% of staff): `account_manager`
+(responsible for customer relationships) and `trip_manager` (schedules
+assignment of passengers/cargo to flights). Customers are ~25% charter
+clients, each with an assigned account manager at the contracted operator.
+
 ## Usage
 
 ```
@@ -48,10 +68,10 @@ Determinism: the same `--seed` always produces byte-identical output. The
 generation window is anchored to a seed-derived date (not the wall clock),
 so reruns on different days match; pass `--as-of YYYY-MM-DD` to pin it
 explicitly. Generation never touches the network.
-
 `--scale small|medium|large` applies 0.5x/1x/3x to the default counts
 (operators 8, vehicles 30, staff 60, facilities 12, customers 10, cargo 80,
-routes 25); any `--num-X` flag overrides the scaled default for that entity.
+routes 25, orders 30); any `--num-X` flag overrides the scaled default for
+that entity.
 
 ### Airport reference data
 

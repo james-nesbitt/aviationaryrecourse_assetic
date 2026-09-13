@@ -246,16 +246,23 @@ def generate_staff(
 ) -> list[dict[str, Any]]:
     flight_roles = ["captain", "first_officer", "cabin_lead", "cabin_crew"]
     ground_roles = ["ramp_agent", "baggage_handler", "maintenance_tech", "fueler"]
+    management_roles = ["account_manager", "trip_manager"]
     passenger_ops = [op for op in operators if op["type"] in ("passenger", "military")]
 
     staff: list[dict[str, Any]] = []
     for _ in range(n):
-        role_class = rng.choices(["flight_crew", "ground_crew"], weights=[45, 55])[0]
+        role_class = rng.choices(
+            ["flight_crew", "ground_crew", "management"],
+            weights=[40, 45, 15],
+        )[0]
         if role_class == "flight_crew" and not passenger_ops:
             role_class = "ground_crew"
         if role_class == "flight_crew":
             op = rng.choice(passenger_ops)
             role = rng.choice(flight_roles)
+        elif role_class == "management":
+            op = rng.choice(operators)
+            role = rng.choice(management_roles)
         else:
             op = rng.choice(operators)
             role = rng.choice(ground_roles)
@@ -297,22 +304,53 @@ def generate_facilities(
 
 def generate_carrier_customers(
     rng: random.Random, ids: IdAssigner, pools: dict[str, Any],
-    operators: list[dict[str, Any]], n: int, anchor: dt.date, window_days: int,
+    operators: list[dict[str, Any]], account_managers: list[dict[str, Any]],
+    n: int, anchor: dt.date, window_days: int,
 ) -> list[dict[str, Any]]:
+    """Customers: cargo shippers and charter passenger-group clients.
+
+    Each customer is assigned a responsible account manager (staff with
+    role=account_manager at the contracted operator), matching the assetic
+    ABAC model where account managers are scoped to assigned customers.
+    """
     cargo_ops = [op for op in operators if op["type"] == "cargo"]
+    charter_ops = [op for op in operators if op["type"] in ("passenger", "cargo")]
     if not cargo_ops:
         cargo_ops = operators  # degenerate small fleets: any operator contracts
+    if not charter_ops:
+        charter_ops = operators
+    am_by_op: dict[str, list[str]] = {}
+    for am in account_managers:
+        am_by_op.setdefault(am["operator_id"], []).append(am["staff_id"])
+
     customers: list[dict[str, Any]] = []
-    for _ in range(n):
-        customers.append({
-            "customer_id": ids.next("cus"),
-            "company_name": f"{rng.choice(pools['customer_company_roots'])} {rng.choice(pools['customer_company_suffixes'])}",
-            "operator_id": rng.choice(cargo_ops)["operator_id"],
-            "contract_start": iso(random_date_in_window(rng, window_start(anchor, window_days), anchor)),
-            "monthly_volume_kg": rng.randint(2000, 250000),
-            "schema_version": SCHEMA_VERSION,
-            "generated_at": iso(anchor),
-        })
+    for i in range(n):
+        if i % 4 == 3:  # ~25% charter clients
+            op = rng.choice(charter_ops)
+            customers.append({
+                "customer_id": ids.next("cus"),
+                "customer_type": "charter",
+                "company_name": f"{rng.choice(pools['charter_company_roots'])} {rng.choice(pools['charter_company_suffixes'])}",
+                "operator_id": op["operator_id"],
+                "account_manager_id": rng.choice(am_by_op[op["operator_id"]]) if am_by_op.get(op["operator_id"]) else None,
+                "contract_start": iso(random_date_in_window(rng, window_start(anchor, window_days), anchor)),
+                "monthly_volume_kg": None,
+                "schema_version": SCHEMA_VERSION,
+                "generated_at": iso(anchor),
+            })
+        else:
+            op = rng.choice(cargo_ops)
+            customers.append({
+                "customer_id": ids.next("cus"),
+                "customer_type": "cargo_shipper",
+                "company_name": f"{rng.choice(pools['customer_company_roots'])} {rng.choice(pools['customer_company_suffixes'])}",
+                "operator_id": op["operator_id"],
+                "account_manager_id": rng.choice(am_by_op[op["operator_id"]]) if am_by_op.get(op["operator_id"]) else None,
+                "contract_start": iso(random_date_in_window(rng, window_start(anchor, window_days), anchor)),
+                "monthly_volume_kg": rng.randint(2000, 250000),
+                "schema_version": SCHEMA_VERSION,
+                "generated_at": iso(anchor),
+            })
     return customers
 
 
@@ -475,3 +513,132 @@ def _great_circle_km(a: dict[str, Any], b: dict[str, Any]) -> float:
     dlam = math.radians(lon2 - lon1)
     h = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
     return 2 * 6371.0 * math.asin(math.sqrt(h))
+
+def generate_orders(
+    rng: random.Random, ids: IdAssigner, pools: dict[str, Any],
+    customers: list[dict[str, Any]], routes: list[dict[str, Any]],
+    staff: list[dict[str, Any]], aircraft_by_model: dict[str, list[dict[str, Any]]] | None,
+    airports: list[dict[str, Any]], models: list[dict[str, Any]],
+    n: int, anchor: dt.date, window_days: int,
+) -> list[dict[str, Any]]:
+    """Customer orders: charter passenger groups and/or cargo bookings.
+
+    An order is a customer request to move people and/or freight from an
+    origin to a destination, which may require multiple transits/flights.
+    The generated itinerary chains route legs from routes.jsonl (matching
+    operator and airports) when possible, producing multi-transit itineraries;
+    otherwise it plans direct legs on plausible aircraft. Each order carries
+    a responsible account manager (from the customer's assignment) and the
+    trip manager at the fulfilling operator who schedules the assignment.
+    """
+    airport_by_iata = {a["iata"]: a for a in airports}
+    routes_by_op: dict[str, list[dict[str, Any]]] = {}
+    for rt in routes:
+        routes_by_op.setdefault(rt["operator_id"], []).append(rt)
+    trip_managers_by_op: dict[str, list[str]] = {}
+    for s in staff:
+        if s["role"] == "trip_manager":
+            trip_managers_by_op.setdefault(s["operator_id"], []).append(s["staff_id"])
+    pax_models = [m for m in models if m["pax_capacity_typical"] > 0]
+    cargo_models = [m for m in models if m["cargo_capacity_kg"] > 0]
+
+    orders: list[dict[str, Any]] = []
+    for _ in range(n):
+        customer = rng.choice(customers)
+        op_id = customer["operator_id"]
+        is_charter = customer["customer_type"] == "charter"
+        origin, dest = rng.sample(airports, 2)
+        order_date = random_date_in_window(rng, window_start(anchor, window_days), anchor)
+
+        # itinerary: chain route legs (multi-transit) or plan direct legs
+        transit_ids: list[str] = []
+        planned_legs: list[dict[str, Any]] = []
+        op_routes = routes_by_op.get(op_id, [])
+        # walk the operator's routes from origin toward dest, chaining legs;
+        # cursor is initialized unconditionally so it never leaks from a
+        # prior loop iteration when this operator has no routes. Only legs
+        # departing after the previous arrival are chained, and no airport
+        # is visited twice, so itineraries are temporally consistent and
+        # non-cyclic.
+        cursor = origin["iata"]
+        visited = {origin["iata"]}
+        last_arrival: dt.datetime | None = None
+        hops = 0
+        while op_routes and cursor != dest["iata"] and hops < 4:
+            matching = [
+                (rt, leg) for rt in op_routes for leg in rt["legs"]
+                if leg["from_iata"] == cursor
+                and leg["to_iata"] not in visited
+                and (last_arrival is None or dt.datetime.fromisoformat(leg["scheduled_departure"]) > last_arrival)
+            ]
+            if not matching:
+                break
+            # prefer a leg heading to dest; otherwise any onward leg
+            toward_dest = [m for m in matching if m[1]["to_iata"] == dest["iata"]]
+            rt, leg = rng.choice(toward_dest or matching)
+            transit_ids.append(rt["route_id"])
+            planned_legs.append({
+                "leg_sequence": len(planned_legs) + 1,
+                "from_iata": leg["from_iata"],
+                "to_iata": leg["to_iata"],
+                "scheduled_departure": leg["scheduled_departure"],
+                "scheduled_arrival": leg["scheduled_arrival"],
+            })
+            visited.add(leg["to_iata"])
+            last_arrival = dt.datetime.fromisoformat(leg["scheduled_arrival"])
+            cursor = leg["to_iata"]
+            hops += 1
+        if cursor != dest["iata"]:
+            # chain could not reach the destination within the hop limit
+            # (or no chainable routes): close the gap with a final direct leg
+            pool = pax_models if is_charter else cargo_models
+            model = rng.choice(pool)
+            if planned_legs:
+                dep = dt.datetime.fromisoformat(planned_legs[-1]["scheduled_arrival"]) + dt.timedelta(hours=rng.randint(2, 24))
+            else:
+                dep = dt.datetime.combine(order_date, dt.time(rng.randint(6, 18), rng.choice([0, 15, 30, 45])))
+            dist = _great_circle_km(airport_by_iata[cursor], dest)
+            flight_min = 30 + int(dist / 800 * 60)
+            planned_legs.append({
+                "leg_sequence": len(planned_legs) + 1,
+                "from_iata": cursor,
+                "to_iata": dest["iata"],
+                "scheduled_departure": dep.isoformat(),
+                "scheduled_arrival": (dep + dt.timedelta(minutes=flight_min)).isoformat(),
+            })
+
+        # cargo details for cargo-bearing orders
+        has_cargo = (not is_charter) or (rng.random() < 0.3)
+        order: dict[str, Any] = {
+            "order_id": ids.next("ord"),
+            "customer_id": customer["customer_id"],
+            "operator_id": op_id,
+            "order_type": "charter_passenger" if is_charter else "cargo",
+            "account_manager_id": customer.get("account_manager_id"),
+            "trip_manager_id": rng.choice(trip_managers_by_op[op_id]) if trip_managers_by_op.get(op_id) else None,
+            "origin_iata": origin["iata"],
+            "destination_iata": dest["iata"],
+            "planned_legs": planned_legs,
+            "transit_route_ids": transit_ids,
+            "ordered_on": iso(order_date),
+            "status": rng.choices(
+                ["requested", "confirmed", "in_progress", "completed"],
+                weights=[25, 35, 25, 15],
+            )[0],
+            "schema_version": SCHEMA_VERSION,
+            "generated_at": iso(anchor),
+        }
+        if is_charter:
+            order["passenger_group"] = {
+                "group_name": rng.choice(pools["charter_group_names"]),
+                "pax_count": rng.randint(20, 180),
+            }
+            if has_cargo:
+                order["accompanying_cargo_kg"] = rng.randint(200, 8000)
+        else:
+            order["freight"] = {
+                "weight_kg": rng.randint(500, 45000),
+                "cargo_type": rng.choice(pools["cargo_types"]),
+            }
+        orders.append(order)
+    return orders

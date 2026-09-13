@@ -12,6 +12,9 @@
   "customer_company_roots": ["Apex", "Baltic", "Cedar", "Delta Ridge", "Everline", "Fjordmark", "Granite", "Harborview", "Ironclad", "Junipex", "Kestrel", "Lakeshore", "Nordwind Logistics", "Oakcrest", "Pinnacle", "Quantix", "Redwood", "Silverline", "Stonebridge", "Titan Freight Co.", "Union Meridian", "Vantage"],
   "customer_company_suffixes": ["Logistics", "Freight Systems", "Shipping Group", "Cargo Partners", "Supply Chain Co.", "Express", "Distribution", "Forwarding"],
   "cargo_types": ["general", "perishable", "pharma", "hazmat", "oversize"],
+  "charter_company_roots": ["Alpine", "Bluepeak", "Cascade", "Draken", "Falcon Ridge", "Glaciermark", "Highland", "Ivorygate", "Jetset Charter Co.", "Kingsway", "Larkspur", "Montclair", "Northlight", "Orchid", "Pinnacle Peaks", "Quarryfield", "Regency", "Silverside", "Tournament", "Voyageur"],
+  "charter_company_suffixes": ["Tours", "Travel Group", "Charters", "Excursions", "Events", "Incentives", "Cruise Partners", "Sports Travel"],
+  "charter_group_names": ["corporate retreat", "sports team", "cruise transfer", "conference delegation", "incentive travel group", "tour group", "government delegation", "pilgrimage group", "university group", "fan travel club"],
   "certifications_by_role": {
     "captain": ["ATPL", "type_rating_A320", "type_rating_B737", "type_rating_A220", "type_rating_CRJ", "CRM", "CAT_III"],
     "first_officer": ["CPL", "type_rating_A320", "type_rating_B737", "type_rating_A220", "type_rating_CRJ", "CRM"],
@@ -20,6 +23,8 @@
     "ramp_agent": ["ramp_safety", "load_control", "dangerous_goods_cat_B"],
     "baggage_handler": ["ramp_safety", "manual_handling", "dangerous_goods_cat_B"],
     "maintenance_tech": ["EASA_Part_66", "FAA_A&P", "borescope", "NDT_level_II"],
-    "fueler": ["fuel_safety", "static_electricity_control", "airfield_driving"]
+    "fueler": ["fuel_safety", "static_electricity_control", "airfield_driving"],
+    "account_manager": ["CRM_systems", "contract_law_basics", "revenue_management", "customer_success"],
+    "trip_manager": ["dispatch_ops", "slot_coordination", "load_planning", "regulatory_compliance"]
   }
 }
