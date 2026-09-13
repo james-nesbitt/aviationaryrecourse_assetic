@@ -1,0 +1,22 @@
+{
+  "models": [
+    {"model_id": "mdl-a319neo", "manufacturer": "Airbus", "family": "A320neo", "icao_type": "A20N", "name": "A319neo", "pax_capacity_typical": 140, "cargo_capacity_kg": 7500, "range_km": 6950, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-a320", "manufacturer": "Airbus", "family": "A320", "icao_type": "A320", "name": "A320-200", "pax_capacity_typical": 180, "cargo_capacity_kg": 10500, "range_km": 6100, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-a321", "manufacturer": "Airbus", "family": "A320", "icao_type": "A321", "name": "A321-200", "pax_capacity_typical": 220, "cargo_capacity_kg": 12000, "range_km": 5950, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-a220-100", "manufacturer": "Airbus", "family": "A220 (formerly Bombardier C Series)", "icao_type": "BCS1", "name": "A220-100", "pax_capacity_typical": 135, "cargo_capacity_kg": 5900, "range_km": 6300, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-a220-300", "manufacturer": "Airbus", "family": "A220 (formerly Bombardier C Series)", "icao_type": "BCS3", "name": "A220-300", "pax_capacity_typical": 160, "cargo_capacity_kg": 7100, "range_km": 6300, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-a330-300", "manufacturer": "Airbus", "family": "A330", "icao_type": "A333", "name": "A330-300", "pax_capacity_typical": 277, "cargo_capacity_kg": 45000, "range_km": 11750, "engine_count": 2, "category": "widebody"},
+    {"model_id": "mdl-a350-900", "manufacturer": "Airbus", "family": "A350", "icao_type": "A359", "name": "A350-900", "pax_capacity_typical": 325, "cargo_capacity_kg": 53000, "range_km": 15000, "engine_count": 2, "category": "widebody"},
+    {"model_id": "mdl-a380-800", "manufacturer": "Airbus", "family": "A380", "icao_type": "A388", "name": "A380-800", "pax_capacity_typical": 555, "cargo_capacity_kg": 66000, "range_km": 15200, "engine_count": 4, "category": "widebody"},
+    {"model_id": "mdl-737-800", "manufacturer": "Boeing", "family": "737 NG", "icao_type": "B738", "name": "737-800", "pax_capacity_typical": 189, "cargo_capacity_kg": 12000, "range_km": 5765, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-737max8", "manufacturer": "Boeing", "family": "737 MAX", "icao_type": "B38M", "name": "737 MAX 8", "pax_capacity_typical": 200, "cargo_capacity_kg": 13000, "range_km": 6570, "engine_count": 2, "category": "narrowbody"},
+    {"model_id": "mdl-747-400f", "manufacturer": "Boeing", "family": "747", "icao_type": "B744", "name": "747-400F", "pax_capacity_typical": 0, "cargo_capacity_kg": 112000, "range_km": 8240, "engine_count": 4, "category": "widebody_freighter"},
+    {"model_id": "mdl-767-300f", "manufacturer": "Boeing", "family": "767", "icao_type": "B763", "name": "767-300F", "pax_capacity_typical": 0, "cargo_capacity_kg": 54000, "range_km": 6055, "engine_count": 2, "category": "widebody_freighter"},
+    {"model_id": "mdl-777-300er", "manufacturer": "Boeing", "family": "777", "icao_type": "B77W", "name": "777-300ER", "pax_capacity_typical": 396, "cargo_capacity_kg": 55000, "range_km": 13650, "engine_count": 2, "category": "widebody"},
+    {"model_id": "mdl-787-9", "manufacturer": "Boeing", "family": "787", "icao_type": "B789", "name": "787-9 Dreamliner", "pax_capacity_typical": 296, "cargo_capacity_kg": 42000, "range_km": 14140, "engine_count": 2, "category": "widebody"},
+    {"model_id": "mdl-crj700", "manufacturer": "Bombardier", "family": "CRJ Series", "icao_type": "CRJ7", "name": "CRJ700", "pax_capacity_typical": 78, "cargo_capacity_kg": 3200, "range_km": 3045, "engine_count": 2, "category": "regional"},
+    {"model_id": "mdl-crj900", "manufacturer": "Bombardier", "family": "CRJ Series", "icao_type": "CRJ9", "name": "CRJ900", "pax_capacity_typical": 90, "cargo_capacity_kg": 4100, "range_km": 2960, "engine_count": 2, "category": "regional"},
+    {"model_id": "mdl-q400", "manufacturer": "Bombardier", "family": "Dash 8", "icao_type": "DH8D", "name": "Dash 8 Q400", "pax_capacity_typical": 78, "cargo_capacity_kg": 3000, "range_km": 2040, "engine_count": 2, "category": "regional_turboprop"},
+    {"model_id": "mdl-cseries-c100", "manufacturer": "Bombardier", "family": "C Series (became Airbus A220-100)", "icao_type": "BCS1", "name": "C Series CS100", "pax_capacity_typical": 135, "cargo_capacity_kg": 5900, "range_km": 6300, "engine_count": 2, "category": "narrowbody"}
+  ]
+}

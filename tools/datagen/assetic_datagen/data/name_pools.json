@@ -1,0 +1,25 @@
+{
+  "given_names": ["Alina", "Andre", "Anika", "Benjamin", "Caleb", "Camille", "Chiara", "Diego", "Elif", "Emil", "Farrah", "Felix", "Grace", "Hana", "Idris", "Ingrid", "Jonas", "Julia", "Kaya", "Lena", "Lucas", "Mara", "Mateo", "Nadia", "Nikolai", "Olivia", "Omar", "Petra", "Quinn", "Rafael", "Sanne", "Silas", "Talia", "Tomas", "Ursula", "Vera", "Willem", "Yara", "Yusuf", "Zoe"],
+  "family_names": ["Almeida", "Andersen", "Baumann", "Berger", "Costa", "Devereux", "Dvorak", "Eriksen", "Fontaine", "Grimaldi", "Halvorsen", "Hoffmann", "Jansen", "Keller", "Kovacs", "Larsen", "Lindqvist", "Marchetti", "Moreau", "Novak", "Okafor", "Ostrowski", "Petrov", "Reyes", "Ricci", "Schmidt", "Sorensen", "Tanaka", "Toth", "Van der Berg", "Villanueva", "Wagner", "Walsh", "Weber", "Wozniak"],
+  "airline_prefixes": ["Aero", "Atlas", "Aurora", "Cardinal", "Cobalt", "Crown", "Ember", "Frontier Pacific", "Helix", "Ironwood", "Jetline", "Meridian", "Northgate", "Northern", "Orion", "Peregrine", "Polar", "Ridgeline", "Silverpine", "Summit", "Tundra", "Vector", "Westfold"],
+  "airline_suffixes": {
+    "passenger": ["Air", "Airways", "Airlines", "Aviation"],
+    "cargo": ["Air Cargo", "Cargo Lines", "Freight Airways", "Cargo Systems"],
+    "military": ["Air Mobility Wing", "Airlift Command", "Air Transport Group", "Air Reserve Wing"]
+  },
+  "gse_types": ["baggage_tug", "baggage_loader", "fuel_truck", "de-icer", "pushback_tug", "catering_truck", "passenger_stairs", "belt_loader", "ground_power_unit", "air_start_unit"],
+  "rail_types": ["cargo_shunter", "crew_transfer_trainset", "hangar_supply_railcar"],
+  "customer_company_roots": ["Apex", "Baltic", "Cedar", "Delta Ridge", "Everline", "Fjordmark", "Granite", "Harborview", "Ironclad", "Junipex", "Kestrel", "Lakeshore", "Nordwind Logistics", "Oakcrest", "Pinnacle", "Quantix", "Redwood", "Silverline", "Stonebridge", "Titan Freight Co.", "Union Meridian", "Vantage"],
+  "customer_company_suffixes": ["Logistics", "Freight Systems", "Shipping Group", "Cargo Partners", "Supply Chain Co.", "Express", "Distribution", "Forwarding"],
+  "cargo_types": ["general", "perishable", "pharma", "hazmat", "oversize"],
+  "certifications_by_role": {
+    "captain": ["ATPL", "type_rating_A320", "type_rating_B737", "type_rating_A220", "type_rating_CRJ", "CRM", "CAT_III"],
+    "first_officer": ["CPL", "type_rating_A320", "type_rating_B737", "type_rating_A220", "type_rating_CRJ", "CRM"],
+    "cabin_lead": ["CCQ", "first_aid", "security_awareness", "fire_fighting_cabin"],
+    "cabin_crew": ["CCQ", "first_aid", "security_awareness"],
+    "ramp_agent": ["ramp_safety", "load_control", "dangerous_goods_cat_B"],
+    "baggage_handler": ["ramp_safety", "manual_handling", "dangerous_goods_cat_B"],
+    "maintenance_tech": ["EASA_Part_66", "FAA_A&P", "borescope", "NDT_level_II"],
+    "fueler": ["fuel_safety", "static_electricity_control", "airfield_driving"]
+  }
+}

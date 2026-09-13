@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "assetic-datagen"
+version = "0.1.0"
+description = "Synthetic testing data generator for the assetic platform (operators, vehicles, staff, cargo, facilities, airports, aircraft models)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+dependencies = []
+
+[project.scripts]
+assetic-datagen = "assetic_datagen.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["assetic_datagen*"]
+
+[tool.setuptools.package-data]
+"assetic_datagen" = ["data/*.json"]
+"assetic_datagen.data" = ["*.json"]
