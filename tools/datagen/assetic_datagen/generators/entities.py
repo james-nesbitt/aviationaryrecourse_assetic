@@ -358,3 +358,120 @@ def generate_cargo(
             rec["assigned_vehicle_id"] = None
         shipments.append(rec)
     return shipments
+
+def generate_routes(
+    rng: random.Random, ids: IdAssigner, vehicles: list[dict[str, Any]],
+    operators: list[dict[str, Any]], airports: list[dict[str, Any]],
+    models: list[dict[str, Any]], cargo: list[dict[str, Any]],
+    n: int, anchor: dt.date,
+) -> list[dict[str, Any]]:
+    """Planned travel routes for carriers.
+
+    A route is an operator's scheduled itinerary for one aircraft vehicle on
+    one operating day: an ordered list of legs (airport pair + scheduled
+    departure/arrival times), anchored at the vehicle's base airport. Legs
+    chain (leg i arrival airport = leg i+1 departure airport) and the route
+    returns to base. Only passenger and cargo operators get routes; military
+    operations are not represented as published carrier routes. Cargo
+    routes use freighter-capable aircraft; cargo legs may reference an open
+    cargo shipment, giving the route file a join point to cargo.jsonl.
+    """
+    model_by_id = {m["model_id"]: m for m in models}
+    airport_by_iata = {a["iata"]: a for a in airports}
+    eligible_ops = [op for op in operators if op["type"] in ("passenger", "cargo")]
+    routes: list[dict[str, Any]] = []
+    if not eligible_ops:
+        return routes
+
+    # aircraft vehicles grouped by operator
+    aircraft_by_op: dict[str, list[dict[str, Any]]] = {}
+    for veh in vehicles:
+        if veh["kind"] == "aircraft":
+            aircraft_by_op.setdefault(veh["operator_id"], []).append(veh)
+
+    # operating days: the 14 days after the anchor (planned future travel)
+    day_offsets = list(range(1, 15))
+    # open cargo shipments per cargo operator, for optional leg references
+    open_cargo_by_op: dict[str, list[str]] = {}
+    for rec in cargo:
+        if rec["status"] in ("scheduled", "loaded", "in_transit"):
+            open_cargo_by_op.setdefault(rec["operator_id"], []).append(rec["cargo_id"])
+    for i in range(n):
+        op = eligible_ops[i % len(eligible_ops)] if i < len(eligible_ops) else rng.choice(eligible_ops)
+        fleet = aircraft_by_op.get(op["operator_id"])
+        if not fleet:
+            continue
+        veh = rng.choice(fleet)
+        model = model_by_id.get(veh["model_id"], {})
+        base = veh["base_iata"]
+        # 2-5 legs; route starts and ends at the vehicle's base
+        n_legs = rng.randint(2, 5)
+        stops = [base]
+        chosen = {base}
+        pool = [a["iata"] for a in airports if a["iata"] != base]
+        # model range gates which airports are reachable from the current stop
+        range_km = model.get("range_km", 3000)
+        limit = range_km * 0.9
+        while len(stops) < n_legs:
+            current = stops[-1]
+            reachable = [iata for iata in pool
+                         if iata not in chosen
+                         and _great_circle_km(airport_by_iata[current], airport_by_iata[iata]) <= limit]
+            # the final leg must return to base within range
+            if len(stops) == n_legs - 1:
+                reachable = [iata for iata in reachable
+                             if _great_circle_km(airport_by_iata[iata], airport_by_iata[base]) <= limit]
+            if not reachable:
+                break  # aircraft range cannot support a longer chain; end the route here
+            stop = rng.choice(reachable)
+            stops.append(stop)
+            chosen.add(stop)
+        # if the loop broke early, drop trailing stops we cannot return to base from
+        while len(stops) > 1 and _great_circle_km(airport_by_iata[stops[-1]], airport_by_iata[base]) > limit:
+            stops.pop()
+        if len(stops) < 2:
+            continue  # nothing reachable from base within range; no route for this vehicle
+        stops.append(base)  # route always returns to base
+        day = anchor + dt.timedelta(days=rng.choice(day_offsets))
+        dep = dt.datetime.combine(day, dt.time(rng.randint(5, 10), rng.choice([0, 15, 30, 45])))
+        legs = []
+        for seq, (a, b) in enumerate(zip(stops, stops[1:]), start=1):
+            dist = _great_circle_km(airport_by_iata[a], airport_by_iata[b])
+            flight_min = 30 + int(dist / 800 * 60)  # ~800 km/h cruise, 30 min taxi/turn
+            arr = dep + dt.timedelta(minutes=flight_min)
+            leg: dict[str, Any] = {
+                "sequence": seq,
+                "from_iata": a,
+                "to_iata": b,
+                "scheduled_departure": dep.isoformat(),
+                "scheduled_arrival": arr.isoformat(),
+            }
+            if op["type"] == "cargo" and open_cargo_by_op.get(op["operator_id"]):
+                # attach an open shipment reference occasionally
+                if rng.random() < 0.4:
+                    leg["cargo_ref"] = rng.choice(open_cargo_by_op[op["operator_id"]])
+            legs.append(leg)
+            dep = arr + dt.timedelta(minutes=rng.randint(45, 120))  # turnaround
+        routes.append({
+            "route_id": ids.next("rte"),
+            "operator_id": op["operator_id"],
+            "vehicle_id": veh["vehicle_id"],
+            "route_type": op["type"],
+            "base_iata": base,
+            "legs": legs,
+            "schema_version": SCHEMA_VERSION,
+            "generated_at": iso(anchor),
+        })
+    return routes
+
+
+def _great_circle_km(a: dict[str, Any], b: dict[str, Any]) -> float:
+    """Haversine great-circle distance in km."""
+    import math
+
+    lat1, lon1, lat2, lon2 = a["latitude"], a["longitude"], b["latitude"], b["longitude"]
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    h = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return 2 * 6371.0 * math.asin(math.sqrt(h))

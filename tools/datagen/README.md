@@ -10,7 +10,7 @@ only** — this tool is the sanctioned source of that data.
 ## Entities
 
 | File | Entities |
-|---|---|
+| `routes.jsonl` | planned carrier travel routes (ordered legs, scheduled times) |
 | `operators.jsonl` | passenger/cargo/military airline operators |
 | `vehicles.jsonl` | aircraft, ground support equipment, rail vehicles |
 | `ownership_history.jsonl` | sales/leases moving vehicles between operators |
@@ -23,6 +23,17 @@ only** — this tool is the sanctioned source of that data.
 
 All records carry `schema_version: 1`. Every cross-file reference resolves
 within the output set.
+
+### Route semantics
+
+Each route is one aircraft's planned operating-day itinerary for a passenger
+or cargo operator: an ordered list of 2–5 legs that starts and ends at the
+vehicle's base airport, scheduled 1–14 days after the anchor date. Leg
+airports are gated by the model's great-circle range (×0.9), departure times
+chain (each leg departs after the previous arrives plus a 45–120 min
+turnaround), and cargo-operator legs may reference an open shipment
+(`cargo_ref`) from `cargo.jsonl`. Military operators get no published
+routes.
 
 ## Usage
 
@@ -39,8 +50,8 @@ so reruns on different days match; pass `--as-of YYYY-MM-DD` to pin it
 explicitly. Generation never touches the network.
 
 `--scale small|medium|large` applies 0.5x/1x/3x to the default counts
-(operators 8, vehicles 30, staff 60, facilities 12, customers 10, cargo 80);
-any `--num-X` flag overrides the scaled default for that entity.
+(operators 8, vehicles 30, staff 60, facilities 12, customers 10, cargo 80,
+routes 25); any `--num-X` flag overrides the scaled default for that entity.
 
 ### Airport reference data
 

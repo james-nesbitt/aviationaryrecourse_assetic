@@ -16,6 +16,7 @@ from .generators import (
     generate_facilities,
     generate_operators,
     generate_ownership_history,
+    generate_routes,
     generate_staff,
     generate_vehicles,
 )
@@ -31,6 +32,7 @@ DEFAULTS = {
     "facilities": 12,
     "customers": 10,
     "cargo": 80,
+    "routes": 25,
 }
 
 
@@ -66,8 +68,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
                     "staff": _scale_count(args, "staff"),
                     "facilities": _scale_count(args, "facilities"),
                     "customers": _scale_count(args, "customers"),
-                    "cargo": _scale_count(args, "cargo")}
-
+                    "cargo": _scale_count(args, "cargo"),
+                    "routes": _scale_count(args, "routes")}
     operators = generate_operators(rng, ids, pools, airports, counts["operators"], anchor, args.window_days)
     vehicles = generate_vehicles(rng, ids, pools, operators, models, airports, counts["vehicles"], anchor)
     ownership = generate_ownership_history(rng, vehicles, operators, anchor, args.window_days)
@@ -75,6 +77,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     facilities = generate_facilities(rng, ids, operators, airports, counts["facilities"], anchor)
     customers = generate_carrier_customers(rng, ids, pools, operators, counts["customers"], anchor, args.window_days)
     cargo = generate_cargo(rng, ids, vehicles, operators, customers, airports, counts["cargo"], anchor, args.window_days)
+    routes = generate_routes(rng, ids, vehicles, operators, airports, models, cargo, counts["routes"], anchor)
 
     files = [
         ("operators.jsonl", operators),
@@ -84,6 +87,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
         ("facilities.jsonl", facilities),
         ("carrier_customers.jsonl", customers),
         ("cargo.jsonl", cargo),
+        ("routes.jsonl", routes),
         ("airports.jsonl", airports),
         ("aircraft_models.jsonl", models),
     ]
