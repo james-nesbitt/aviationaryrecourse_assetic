@@ -93,7 +93,7 @@ export async function registerJournalRoutes(app: FastifyInstance): Promise<void>
       entityType: string;
       entityId: string;
     };
-    return prisma.$queryRaw`
+    const rows = await prisma.$queryRaw`
       SELECT journal_id, chain_key, event_type, entity_type, entity_id,
              actor_id, agent_run_id, payload, valid_time, transaction_time,
              prev_hash, row_hash, schema_version
@@ -101,6 +101,10 @@ export async function registerJournalRoutes(app: FastifyInstance): Promise<void>
       WHERE entity_type = ${entityType} AND entity_id = ${entityId}
       ORDER BY journal_id ASC
     `;
+    return (rows as Array<{ journal_id: bigint }>).map((row) => ({
+      ...row,
+      journal_id: row.journal_id.toString(),
+    }));
   });
 
   // Verify a chain's integrity
@@ -137,7 +141,7 @@ export async function registerJournalRoutes(app: FastifyInstance): Promise<void>
       const valid = expectedHash === row.row_hash;
       const chainValid = row.prev_hash === prevHash;
       prevHash = row.row_hash;
-      verification.push({ journal_id: row.journal_id, valid, chainValid });
+      verification.push({ journal_id: row.journal_id.toString(), valid, chainValid });
     }
 
     return {

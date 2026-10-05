@@ -21,6 +21,7 @@ app.addHook("onRequest", authHook);
 // Health
 app.get("/health", async () => ({ status: "ok" }));
 app.get("/healthz", async () => "ok");
+app.get("/api/health", async () => ({ status: "ok" }));
 
 // Auth config endpoint — tells the UI where Keycloak is
 app.get("/api/auth/config", async () => ({

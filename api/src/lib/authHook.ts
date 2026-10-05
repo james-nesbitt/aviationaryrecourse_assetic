@@ -13,7 +13,7 @@ declare module "fastify" {
  */
 export async function authHook(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   // Skip auth for health checks and login-related endpoints
-  const skipPaths = ["/health", "/healthz", "/api/auth/config"];
+  const skipPaths = ["/health", "/healthz", "/api/health", "/api/auth/config"];
   if (skipPaths.includes(request.url.split("?")[0])) {
     return;
   }

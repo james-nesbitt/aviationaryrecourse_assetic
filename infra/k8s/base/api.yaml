@@ -132,6 +132,8 @@ spec:
                 secretKeyRef:
                   name: assetic-api-config
                   key: KEYCLOAK_URL
+            - name: KEYCLOAK_JWKS_URL
+              value: "http://keycloak:8080/auth"
             - name: KEYCLOAK_REALM
               valueFrom:
                 secretKeyRef:
