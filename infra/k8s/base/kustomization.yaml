@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - keycloak.yaml
+  - api.yaml
+  - ui.yaml
+  - ingress.yaml
+
+configMapGenerator:
+  - name: assetic-db-migrations
+    namespace: assetic-poc
+    files:
+      - 001_initial_schema.sql=../../../db/migrations/001_initial_schema.sql
+      - 002_app_role.sql=../../../db/migrations/002_app_role.sql
+      - 003_journal_hash_function.sql=../../../db/migrations/003_journal_hash_function.sql
+generatorOptions:
+  disableNameSuffixHash: true

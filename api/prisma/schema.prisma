@@ -1,0 +1,226 @@
+// assetic POC Prisma schema — mirrors the raw SQL migrations in db/migrations/
+// Uses raw SQL migrations (not Prisma migrate) for the hash-chained journal and grants.
+// Prisma client is generated from this schema for typed DB access on state tables.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Airport {
+  iata         String @id @db.Char(3)
+  icao         String
+  name         String
+  city         String
+  country      String
+  countryCode  String @map("country_code") @db.Char(2)
+  latitude     Float
+  longitude    Float
+  elevationFt  Int    @map("elevation_ft")
+  timezone     String
+
+  @@map("airport")
+}
+
+model AircraftModel {
+  modelId            String @id @map("model_id")
+  manufacturer       String
+  family             String
+  icaoType           String @map("icao_type")
+  name               String
+  paxCapacityTypical Int    @map("pax_capacity_typical")
+  cargoCapacityKg    Int    @map("cargo_capacity_kg")
+  rangeKm            Int    @map("range_km")
+  engineCount        Int    @map("engine_count")
+  category           String
+  vehicles           Vehicle[]
+
+  @@map("aircraft_model")
+}
+
+model Operator {
+  operatorId     String         @id @map("operator_id")
+  name           String         @unique
+  type           String
+  country        String
+  hubIata        String         @map("hub_iata") @db.Char(3)
+  foundedYear    Int            @map("founded_year")
+  fleetSizeHint  Int            @map("fleet_size_hint")
+  schemaVersion  Int            @default(1) @map("schema_version")
+  generatedAt    DateTime       @map("generated_at") @db.Date
+  vehicles       Vehicle[]
+  staff          Staff[]
+  facilities     Facility[]
+  customers      CarrierCustomer[]
+  cargo          Cargo[]
+  routes         Route[]
+  orders         AsseticOrder[]
+
+  @@map("operator")
+}
+
+model Vehicle {
+  vehicleId     String    @id @map("vehicle_id")
+  kind          String
+  operatorId    String    @map("operator_id")
+  registration  String?
+  modelId       String?   @map("model_id")
+  status        String?
+  seatConfig    Json?     @map("seat_config")
+  gseType       String?   @map("gse_type")
+  railType      String?   @map("rail_type")
+  baseIata      String?   @map("base_iata") @db.Char(3)
+  homeIata      String?   @map("home_iata") @db.Char(3)
+  schemaVersion Int       @default(1) @map("schema_version")
+  generatedAt   DateTime  @map("generated_at") @db.Date
+
+  operator      Operator       @relation(fields: [operatorId], references: [operatorId])
+  model         AircraftModel? @relation(fields: [modelId], references: [modelId])
+
+  @@index([operatorId])
+  @@index([kind])
+  @@map("vehicle")
+}
+
+
+model OwnershipHistory {
+  vehicleId       String @map("vehicle_id")
+  sequence        Int
+  fromOperatorId  String @map("from_operator_id")
+  toOperatorId    String @map("to_operator_id")
+  transferType    String @map("transfer_type")
+  validTime       DateTime @map("valid_time") @db.Date
+
+  @@id([vehicleId, sequence])
+  @@map("ownership_history")
+}
+
+model Staff {
+  staffId        String   @id @map("staff_id")
+  givenName      String   @map("given_name")
+  familyName     String   @map("family_name")
+  roleClass      String   @map("role_class")
+  role           String
+  operatorId     String   @map("operator_id")
+  baseIata       String   @map("base_iata") @db.Char(3)
+  hireDate       DateTime @map("hire_date") @db.Date
+  certifications Json     @default("[]")
+  schemaVersion  Int      @default(1) @map("schema_version")
+  generatedAt    DateTime @map("generated_at") @db.Date
+
+  operator       Operator @relation(fields: [operatorId], references: [operatorId])
+
+  @@index([operatorId])
+  @@index([role])
+  @@map("staff")
+}
+
+model Facility {
+  facilityId     String   @id @map("facility_id")
+  facilityType   String   @map("facility_type")
+  operatorId     String   @map("operator_id")
+  airportIata    String   @map("airport_iata") @db.Char(3)
+  capacityUnits  Int      @map("capacity_units")
+  schemaVersion  Int      @default(1) @map("schema_version")
+  generatedAt    DateTime @map("generated_at") @db.Date
+
+  operator       Operator @relation(fields: [operatorId], references: [operatorId])
+
+  @@index([operatorId])
+  @@map("facility")
+}
+
+model CarrierCustomer {
+  customerId        String    @id @map("customer_id")
+  customerType      String    @map("customer_type")
+  companyName       String    @map("company_name")
+  operatorId        String    @map("operator_id")
+  accountManagerId  String?   @map("account_manager_id")
+  contractStart     DateTime  @map("contract_start") @db.Date
+  monthlyVolumeKg   Int?      @map("monthly_volume_kg")
+  schemaVersion     Int       @default(1) @map("schema_version")
+  generatedAt       DateTime  @map("generated_at") @db.Date
+
+  operator          Operator @relation(fields: [operatorId], references: [operatorId])
+  cargo             Cargo[]
+  orders            AsseticOrder[]
+
+  @@index([operatorId])
+  @@map("carrier_customer")
+}
+
+model Cargo {
+  cargoId           String   @id @map("cargo_id")
+  customerId        String   @map("customer_id")
+  operatorId        String   @map("operator_id")
+  originIata        String   @map("origin_iata") @db.Char(3)
+  destinationIata   String   @map("destination_iata") @db.Char(3)
+  assignedVehicleId String?  @map("assigned_vehicle_id")
+  weightKg          Int      @map("weight_kg")
+  cargoType         String   @map("cargo_type")
+  status            String
+  validTime         DateTime @map("valid_time") @db.Date
+  schemaVersion     Int      @default(1) @map("schema_version")
+  generatedAt       DateTime @map("generated_at") @db.Date
+
+  customer          CarrierCustomer @relation(fields: [customerId], references: [customerId])
+  operator          Operator        @relation(fields: [operatorId], references: [operatorId])
+
+  @@index([customerId])
+  @@index([operatorId])
+  @@index([status])
+  @@map("cargo")
+}
+
+model Route {
+  routeId       String   @id @map("route_id")
+  operatorId    String   @map("operator_id")
+  vehicleId     String   @map("vehicle_id")
+  routeType     String   @map("route_type")
+  baseIata      String   @map("base_iata") @db.Char(3)
+  legs          Json
+  schemaVersion Int      @default(1) @map("schema_version")
+  generatedAt   DateTime @map("generated_at") @db.Date
+
+  operator      Operator @relation(fields: [operatorId], references: [operatorId])
+
+  @@index([operatorId])
+  @@index([vehicleId])
+  @@map("route")
+}
+
+model AsseticOrder {
+  orderId           String   @id @map("order_id")
+  customerId        String   @map("customer_id")
+  operatorId        String   @map("operator_id")
+  orderType         String   @map("order_type")
+  accountManagerId  String?  @map("account_manager_id")
+  tripManagerId     String?  @map("trip_manager_id")
+  originIata        String   @map("origin_iata") @db.Char(3)
+  destinationIata   String   @map("destination_iata") @db.Char(3)
+  plannedLegs       Json     @map("planned_legs")
+  transitRouteIds   Json     @default("[]") @map("transit_route_ids")
+  orderedOn         DateTime @map("ordered_on") @db.Date
+  status            String
+  passengerGroup    Json?    @map("passenger_group")
+  freight           Json?
+  schemaVersion     Int      @default(1) @map("schema_version")
+  generatedAt       DateTime @map("generated_at") @db.Date
+
+  customer          CarrierCustomer @relation(fields: [customerId], references: [customerId])
+  operator          Operator        @relation(fields: [operatorId], references: [operatorId])
+
+  @@index([customerId])
+  @@index([operatorId])
+  @@index([status])
+  @@map("assetic_order")
+}
+
+// Journal is managed via raw SQL (see db/migrations/001_initial_schema.sql).
+// Prisma does not manage this table's schema; we use $queryRaw for appends.
+// model JournalEntry is intentionally omitted from Prisma to keep the
+// append-only/hash-chain constraints in raw SQL.

@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: assetic-ingress
+  namespace: assetic-poc
+  labels:
+    app.kubernetes.io/part-of: assetic
+spec:
+  rules:
+    - host: assetic.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: assetic-api
+                port:
+                  number: 3001
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: assetic-ui
+                port:
+                  number: 80
+---
+# NodePort fallback if no IngressClass is available
+apiVersion: v1
+kind: Service
+metadata:
+  name: assetic-ui-nodeport
+  namespace: assetic-poc
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: assetic-ui
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
+      name: http

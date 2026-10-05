@@ -1,0 +1,109 @@
+{
+  "realm": "assetic",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "clients": [
+    {
+      "clientId": "assetic-ui",
+      "name": "assetic UI",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/callback",
+        "http://localhost:3000/callback",
+        "http://localhost:8080/callback",
+        "http://127.0.0.1:5173/callback",
+        "http://assetic-ui:80/callback",
+        "http://localhost:30080/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:5173",
+        "http://localhost:30080"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "assetic-api",
+      "name": "assetic API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "assetic-api-secret-dev",
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "bearerOnly": true
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "asset_manager", "description": "Manage asset masters, fleet config" },
+      { "name": "account_manager", "description": "Manage customers and contracts" },
+      { "name": "trip_manager", "description": "Manage trips and dispatches" },
+      { "name": "maintenance", "description": "Manage maintenance records" },
+      { "name": "loading_team", "description": "Manage cargo loading and custody" },
+      { "name": "on_board_staff", "description": "On-board operations" },
+      { "name": "analytics", "description": "Read-only analytics access" },
+      { "name": "sysadmin", "description": "System administration (no domain PII)" }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@assetic.local",
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "admin", "temporary": false }
+      ],
+      "realmRoles": ["asset_manager", "account_manager", "trip_manager", "sysadmin"]
+    },
+    {
+      "username": "tripmgr",
+      "enabled": true,
+      "email": "tripmgr@assetic.local",
+      "firstName": "Trip",
+      "lastName": "Manager",
+      "credentials": [
+        { "type": "password", "value": "tripmgr", "temporary": false }
+      ],
+      "realmRoles": ["trip_manager"]
+    },
+    {
+      "username": "loader",
+      "enabled": true,
+      "email": "loader@assetic.local",
+      "firstName": "Loading",
+      "lastName": "Operator",
+      "credentials": [
+        { "type": "password", "value": "loader", "temporary": false }
+      ],
+      "realmRoles": ["loading_team"]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "email": "viewer@assetic.local",
+      "firstName": "Read",
+      "lastName": "Only",
+      "credentials": [
+        { "type": "password", "value": "viewer", "temporary": false }
+      ],
+      "realmRoles": ["analytics"]
+    }
+  ]
+}

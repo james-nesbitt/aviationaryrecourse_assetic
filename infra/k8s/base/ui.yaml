@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assetic-ui
+  namespace: assetic-poc
+  labels:
+    app.kubernetes.io/name: assetic-ui
+    app.kubernetes.io/part-of: assetic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: assetic-ui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: assetic-ui
+    spec:
+      containers:
+        - name: ui
+          image: assetic/ui:latest
+          ports:
+            - containerPort: 80
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: assetic-ui
+  namespace: assetic-poc
+spec:
+  selector:
+    app.kubernetes.io/name: assetic-ui
+  ports:
+    - port: 80
+      name: http

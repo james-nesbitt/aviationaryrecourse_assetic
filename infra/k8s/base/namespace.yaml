@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: assetic-poc
+  labels:
+    app.kubernetes.io/part-of: assetic
+    app.kubernetes.io/environment: poc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: assetic-api-config
+  namespace: assetic-poc
+data:
+  KEYCLOAK_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "assetic"
+  KEYCLOAK_CLIENT_ID: "assetic-api"
+  KEYCLOAK_UI_CLIENT_ID: "assetic-ui"
+  UI_URL: "http://assetic-ui"
+  PORT: "3001"
+  HOST: "0.0.0.0"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: assetic-db-credentials
+  namespace: assetic-poc
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://**REDACTED**@assetic-postgres:5432/assetic?schema=public"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: assetic-postgres-credentials
+  namespace: assetic-poc
+type: Opaque
+stringData:
+  POSTGRES_USER: "assetic"
+  POSTGRES_PASSWORD: "pg-dev-pw-01"
+  POSTGRES_DB: "assetic"
