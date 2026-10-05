@@ -16,23 +16,156 @@ spec:
       labels:
         app.kubernetes.io/name: assetic-api
     spec:
+      initContainers:
+        # Build the API from source: extract tarball, install deps, generate Prisma client
+        - name: build
+          image: node:20-slim
+          workingDir: /build
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Extracting source..."
+              tar xzf /src/source.tar.gz -C /build
+              echo "Installing system dependencies..."
+              apt-get update -qq > /dev/null 2>&1
+              apt-get install -y -qq openssl > /dev/null 2>&1
+              echo "Installing dependencies..."
+              npm install --no-audit --no-fund
+              echo "Generating Prisma client..."
+              npx prisma generate
+              echo "Building TypeScript..."
+              npx tsc
+              echo "Build complete."
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-db-credentials
+                  key: DATABASE_URL
+          volumeMounts:
+            - name: source
+              mountPath: /src
+              readOnly: true
+            - name: built
+              mountPath: /build
+        # Wait for Postgres to be ready, then load data
+        - name: load-data
+          image: node:20-slim
+          workingDir: /build
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              # Install postgresql-client (includes pg_isready and psql)
+              apt-get update -qq > /dev/null 2>&1
+              apt-get install -y -qq postgresql-client > /dev/null 2>&1
+
+              echo "Waiting for Postgres..."
+              until pg_isready -h assetic-postgres -p 5432 -U assetic 2>/dev/null; do
+                echo "  Postgres not ready, retrying..."
+                sleep 3
+              done
+              echo "Postgres is ready."
+
+              # Strip Prisma-specific query params for psql
+              PSQL_URL=$(echo "$DATABASE_URL" | cut -d'?' -f1)
+
+              # Apply migrations — drop and recreate for clean state on restart
+              echo "Applying schema migrations..."
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;"
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/001_initial_schema.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/002_app_role.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/003_journal_hash_function.sql
+              echo "Migrations applied."
+
+              # Load data from datagen JSONL
+              echo "Loading synthetic data..."
+              mkdir -p /data
+              tar xzf /datagen/data.tar.gz -C /data
+              npx tsx src/scripts/load-jsonl.ts --dir /data 2>&1 || echo "Data load skipped (may already be loaded)"
+              echo "Data load complete."
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-db-credentials
+                  key: DATABASE_URL
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-db-credentials
+                  key: POSTGRES_USER
+            - name: PGHOST
+              value: "assetic-postgres"
+            - name: PGPORT
+              value: "5432"
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-db-credentials
+                  key: POSTGRES_DB
+          volumeMounts:
+            - name: built
+              mountPath: /build
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+            - name: datagen
+              mountPath: /datagen
+              readOnly: true
       containers:
         - name: api
-          image: assetic/api:latest
+          image: node:20-slim
+          workingDir: /app
+          command: ["sh", "-c", "apt-get update -qq > /dev/null 2>&1 && apt-get install -y -qq openssl > /dev/null 2>&1 && node dist/server.js"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-db-credentials
+                  key: DATABASE_URL
+            - name: KEYCLOAK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-api-config
+                  key: KEYCLOAK_URL
+            - name: KEYCLOAK_REALM
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-api-config
+                  key: KEYCLOAK_REALM
+            - name: KEYCLOAK_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-api-config
+                  key: KEYCLOAK_CLIENT_ID
+            - name: KEYCLOAK_UI_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-api-config
+                  key: KEYCLOAK_UI_CLIENT_ID
+            - name: UI_URL
+              valueFrom:
+                secretKeyRef:
+                  name: assetic-api-config
+                  key: UI_URL
+            - name: PORT
+              value: "3001"
+            - name: HOST
+              value: "0.0.0.0"
           ports:
             - containerPort: 3001
               name: http
-          envFrom:
-            - configMapRef:
-                name: assetic-api-config
-            - secretRef:
-                name: assetic-db-credentials
           readinessProbe:
             httpGet:
               path: /health
               port: 3001
             initialDelaySeconds: 5
             periodSeconds: 5
+            failureThreshold: 10
           resources:
             requests:
               cpu: 100m
@@ -40,6 +173,21 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          volumeMounts:
+            - name: built
+              mountPath: /app
+      volumes:
+        - name: source
+          configMap:
+            name: assetic-api-source
+        - name: migrations
+          configMap:
+            name: assetic-db-migrations
+        - name: datagen
+          configMap:
+            name: assetic-datagen-data
+        - name: built
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

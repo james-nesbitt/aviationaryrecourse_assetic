@@ -31,7 +31,6 @@ export interface AsseticUser {
 export async function verifyToken(token: string): Promise<AsseticUser> {
   const { payload } = await jwtVerify(token, JWKS, {
     issuer: expectedIssuer,
-    audience: clientId,
   });
 
   const realmAccess = payload.realm_access as { roles?: string[] } | undefined;
