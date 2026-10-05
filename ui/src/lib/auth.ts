@@ -69,7 +69,51 @@ function clearTokens(): void {
 }
 
 export function isLoggedIn(): boolean {
-  return getToken() !== null;
+  const token = getToken();
+  if (!token) return false;
+  // Check if token is expired
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    const exp = payload.exp * 1000; // seconds to ms
+    if (Date.now() >= exp) {
+      // Token expired — don't clear yet, let apiFetch try refresh
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refresh the access token using the stored refresh token.
+ * Returns true on success, false if no refresh token or refresh failed.
+ */
+async function doTokenRefresh(): Promise<boolean> {
+  const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return false;
+
+  const cfg = await loadConfig();
+  const tokenUrl = `${cfg.keycloakUrl}/realms/${cfg.realm}/protocol/openid-connect/token`;
+  const body = new URLSearchParams({
+    client_id: cfg.clientId,
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+
+  try {
+    const res = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!res.ok) return false;
+    const tokens = (await res.json()) as { access_token: string; refresh_token?: string };
+    setTokens(tokens.access_token, tokens.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -170,18 +214,37 @@ export async function logout(): Promise<void> {
 
 /**
  * Authenticated fetch wrapper — adds the Bearer token, handles 401.
+ * On 401, attempts token refresh once before redirecting to login.
  */
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = getToken();
-  if (!token) throw new Error("Not authenticated");
+  let token = getToken();
+  if (!token) {
+    // Try refresh once — maybe the token expired but refresh token is still valid
+    const refreshed = await doTokenRefresh();
+    if (!refreshed) {
+      clearTokens();
+      window.location.href = "/login";
+      throw new Error("Not authenticated");
+    }
+    token = getToken();
+  }
 
   const headers = new Headers(options.headers);
   headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(path, { ...options, headers });
+  let res = await fetch(path, { ...options, headers });
   if (res.status === 401) {
-    clearTokens();
-    window.location.href = "/login";
+    // Token might be expired — try refresh and retry once
+    const refreshed = await doTokenRefresh();
+    if (refreshed) {
+      token = getToken();
+      headers.set("Authorization", `Bearer ${token}`);
+      res = await fetch(path, { ...options, headers });
+    }
+    if (res.status === 401) {
+      clearTokens();
+      window.location.href = "/login";
+    }
   }
   return res;
 }
