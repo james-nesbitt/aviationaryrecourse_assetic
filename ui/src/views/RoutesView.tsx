@@ -66,7 +66,7 @@ export function RoutesView(): React.ReactElement {
                 <td style={td}>{expanded === r.route_id ? "▲" : "▼"}</td>
               </tr>
               {expanded === r.route_id && (
-                <tr>
+                <tr onClick={(e) => e.stopPropagation()}>
                   <td colSpan={7} style={{ padding: 16, background: "#f9f9f9" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%" }}>
                       <thead>
