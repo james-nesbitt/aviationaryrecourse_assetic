@@ -6,16 +6,17 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
  * and checks the `iss` claim. Extracts roles from realm_access.roles.
  *
  * Config via env:
- *   KEYCLOAK_URL      — e.g. http://localhost:8080
- *   KEYCLOAK_REALM    — e.g. assetic
- *   KEYCLOAK_CLIENT_ID — e.g. assetic-api
+ *   KEYCLOAK_URL          — external URL for issuer check (e.g. https://assetic.home.arpa/auth)
+ *   KEYCLOAK_JWKS_URL     — internal URL for JWKS fetch (optional, defaults to KEYCLOAK_URL)
+ *   KEYCLOAK_REALM        — e.g. assetic
+ *   KEYCLOAK_CLIENT_ID    — e.g. assetic-api
  */
 
 const keycloakUrl = process.env.KEYCLOAK_URL ?? "http://localhost:8080";
+const keycloakJwksUrl = process.env.KEYCLOAK_JWKS_URL ?? keycloakUrl;
 const realm = process.env.KEYCLOAK_REALM ?? "assetic";
-const clientId = process.env.KEYCLOAK_CLIENT_ID ?? "assetic-api";
 
-const jwksUrl = new URL(`${keycloakUrl}/realms/${realm}/protocol/openid-connect/certs`);
+const jwksUrl = new URL(`${keycloakJwksUrl}/realms/${realm}/protocol/openid-connect/certs`);
 const JWKS = createRemoteJWKSet(jwksUrl);
 
 const expectedIssuer = `${keycloakUrl}/realms/${realm}`;

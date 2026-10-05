@@ -14,7 +14,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma db push --accept-data-loss",
     "load:data": "tsx src/scripts/load-jsonl.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
@@ -29,6 +31,7 @@
     "@types/node": "^20.14.0",
     "prisma": "^5.18.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "~2.1.0"
   }
 }
