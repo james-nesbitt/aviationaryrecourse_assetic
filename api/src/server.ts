@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { authHook } from "./lib/authHook.js";
+import { snakeKeys } from "./lib/serialize.js";
 import { registerDomainRoutes } from "./routes/domain.js";
 import { registerJournalRoutes } from "./routes/journal.js";
 
@@ -17,6 +18,16 @@ await app.register(cors, {
 
 // Auth hook — runs on every request, skips health paths
 app.addHook("onRequest", authHook);
+
+// Emit snake_case keys on domain data so Prisma-backed and $queryRaw-backed
+// routes agree. /api/auth/config is client bootstrap config, not domain data:
+// its camelCase keys are part of the UI contract and are left untouched.
+app.addHook("preSerialization", async (request, _reply, payload) => {
+  const path = request.url.split("?")[0];
+  if (!path.startsWith("/api/")) return payload;
+  if (path === "/api/auth/config" || path === "/api/health") return payload;
+  return snakeKeys(payload);
+});
 
 // Health
 app.get("/health", async () => ({ status: "ok" }));
