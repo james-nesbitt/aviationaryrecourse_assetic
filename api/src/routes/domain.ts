@@ -157,4 +157,69 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
       data: body as never,
     });
   });
+
+  // ── Passengers ──────────────────────────────────────────────────────────
+  app.get("/api/passengers", async (request) => {
+    const query = request.query as { operatorId?: string; status?: string };
+    const where: Record<string, unknown> = {};
+    if (query.operatorId) where.operatorId = query.operatorId;
+    if (query.status) where.status = query.status;
+    return prisma.passenger.findMany({
+      where,
+      orderBy: { passengerId: "asc" },
+    });
+  });
+
+  app.get("/api/passengers/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.passenger.findUnique({ where: { passengerId: id } });
+  });
+
+  // ── Cargo current locations (projection view) ───────────────────────────
+  app.get("/api/cargo/locations", async () => {
+    return prisma.$queryRaw`
+      SELECT * FROM cargo_current_location ORDER BY cargo_id ASC
+    `;
+  });
+
+  app.get("/api/cargo/:id/location", async (request) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.$queryRaw`
+      SELECT * FROM cargo_current_location WHERE cargo_id = ${id}
+    `;
+    return (rows as unknown[])[0] ?? null;
+  });
+
+  // ── Passenger current locations (projection view) ───────────────────────
+  app.get("/api/passengers/locations", async () => {
+    return prisma.$queryRaw`
+      SELECT * FROM passenger_current_location ORDER BY passenger_id ASC
+    `;
+  });
+
+  app.get("/api/passengers/:id/location", async (request) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.$queryRaw`
+      SELECT * FROM passenger_current_location WHERE passenger_id = ${id}
+    `;
+    return (rows as unknown[])[0] ?? null;
+  });
+
+  // ── Cargo journey history ───────────────────────────────────────────────
+  app.get("/api/cargo/:id/journey", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.cargoJourneyEvent.findMany({
+      where: { cargoId: id },
+      orderBy: { sequence: "asc" },
+    });
+  });
+
+  // ── Passenger boarding history ──────────────────────────────────────────
+  app.get("/api/passengers/:id/boarding", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.passengerBoardingEvent.findMany({
+      where: { passengerId: id },
+      orderBy: { sequence: "asc" },
+    });
+  });
 }

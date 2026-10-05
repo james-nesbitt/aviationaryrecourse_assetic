@@ -19,6 +19,9 @@ only** — this tool is the sanctioned source of that data.
 | `facilities.jsonl` | hangars and warehouses |
 | `carrier_customers.jsonl` | customers: cargo shippers and charter passenger-group clients, each with a responsible account manager |
 | `cargo.jsonl` | shipments with origin/destination and assigned vehicle |
+| `passengers.jsonl` | passengers carried on charter and scheduled passenger flights |
+| `cargo_journey_events.jsonl` | per-shipment location-tracking event chains (pickup → delivered) |
+| `passenger_boarding_events.jsonl` | per-passenger boarding/location event chains (check-in → disembarked) |
 | `airports.jsonl` | the resolved airport reference set actually used |
 | `aircraft_models.jsonl` | the aircraft models actually referenced |
 
@@ -55,6 +58,54 @@ Staff generation includes management roles (~15% of staff): `account_manager`
 assignment of passengers/cargo to flights). Customers are ~25% charter
 clients, each with an assigned account manager at the contracted operator.
 
+### Passenger semantics
+
+Each passenger record is a person carried by an operator between a distinct
+origin/destination airport pair. Charter-passenger orders materialize 2–3
+passengers per order (linked via `order_id`); regular passenger operators
+additionally get 5–15 standalone passengers with `order_id: null`,
+representing scheduled-service bookings. `passenger_type` is weighted
+adult/child/infant (80/15/5) and `status` is weighted
+checked_in/boarded/in_transit/arrived/disembarked (15/25/25/25/10).
+
+### Cargo journey event semantics
+
+Each cargo shipment emits a strictly-increasing chain of location-tracking
+events (`cargo_journey_events.jsonl`), starting with `pickup` at the origin
+airport. The chain depth reflects the shipment `status`:
+
+| status | chain |
+| `scheduled` | `pickup` (at origin) |
+| `loaded` | `pickup` → `loaded` (origin, with vehicle) |
+| `in_transit` | `pickup` → `loaded` → `departed` (+ optional `arrived` at an intermediate airport) |
+| `delivered` | `pickup` → `loaded` → `departed` → (optional `arrived`) → (optional `warehouse_hold` at a warehouse facility, optionally followed by `transferred`) → `delivered` (at destination) |
+
+`warehouse_hold` events reference a warehouse facility at the arrival airport
+when one exists; `loaded`/`departed`/`arrived` events reference the carrying
+aircraft vehicle; `actor_id` is a ground-crew staff member at the fulfilling
+operator (null when that operator has no ground crew). `sequence` is
+per-cargo 1..n and `valid_time` is a strictly increasing datetime along the
+chain.
+
+### Passenger boarding event semantics
+
+Each passenger emits a strictly-increasing chain of boarding/location events
+(`passenger_boarding_events.jsonl`), starting with `checked_in` at the origin
+airport. The chain depth reflects the passenger `status`:
+
+| status | chain |
+| `checked_in` | `checked_in` (origin) |
+| `boarded` | `checked_in` → `boarded` (origin, with vehicle) |
+| `in_transit` | `checked_in` → `boarded` → `departed` |
+| `arrived` | `checked_in` → `boarded` → `departed` → `arrived` (destination) |
+| `disembarked` | `checked_in` → `boarded` → `departed` → `arrived` → `disembarked` (destination) |
+
+`boarded`/`departed`/`arrived` events reference the carrying aircraft vehicle;
+`actor_id` is a flight-crew member for boarding/departure/arrival/disembarking
+and a ground-crew member for check-in (null when the carrying operator has no
+such staff). `sequence` is per-passenger 1..n and `valid_time` is a strictly
+increasing datetime along the chain.
+
 ## Usage
 
 ```
@@ -70,7 +121,7 @@ so reruns on different days match; pass `--as-of YYYY-MM-DD` to pin it
 explicitly. Generation never touches the network.
 `--scale small|medium|large` applies 0.5x/1x/3x to the default counts
 (operators 8, vehicles 30, staff 60, facilities 12, customers 10, cargo 80,
-routes 25, orders 30); any `--num-X` flag overrides the scaled default for
+routes 25, orders 30, passengers 40); any `--num-X` flag overrides the scaled default for
 that entity.
 
 ### Airport reference data

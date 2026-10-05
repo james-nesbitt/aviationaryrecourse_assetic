@@ -12,11 +12,14 @@ from pathlib import Path
 from . import reference
 from .generators import (
     generate_cargo,
+    generate_cargo_journey_events,
     generate_carrier_customers,
     generate_facilities,
     generate_operators,
     generate_orders,
     generate_ownership_history,
+    generate_passenger_boarding_events,
+    generate_passengers,
     generate_routes,
     generate_staff,
     generate_vehicles,
@@ -35,6 +38,7 @@ DEFAULTS = {
     "cargo": 80,
     "routes": 25,
     "orders": 30,
+    "passengers": 40,
 }
 
 
@@ -72,7 +76,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
                     "customers": _scale_count(args, "customers"),
                     "cargo": _scale_count(args, "cargo"),
                     "routes": _scale_count(args, "routes"),
-                    "orders": _scale_count(args, "orders")}
+                    "orders": _scale_count(args, "orders"),
+                    "passengers": _scale_count(args, "passengers")}
     operators = generate_operators(rng, ids, pools, airports, counts["operators"], anchor, args.window_days)
     vehicles = generate_vehicles(rng, ids, pools, operators, models, airports, counts["vehicles"], anchor)
     ownership = generate_ownership_history(rng, vehicles, operators, anchor, args.window_days)
@@ -83,6 +88,9 @@ def cmd_generate(args: argparse.Namespace) -> int:
     cargo = generate_cargo(rng, ids, vehicles, operators, customers, airports, counts["cargo"], anchor, args.window_days)
     routes = generate_routes(rng, ids, vehicles, operators, airports, models, cargo, counts["routes"], anchor)
     orders = generate_orders(rng, ids, pools, customers, routes, staff, None, airports, models, counts["orders"], anchor, args.window_days)
+    passengers = generate_passengers(rng, ids, pools, orders, operators, airports, counts["passengers"], anchor, args.window_days)
+    cargo_journey_events = generate_cargo_journey_events(rng, ids, cargo, facilities, vehicles, staff, airports, anchor, args.window_days)
+    passenger_boarding_events = generate_passenger_boarding_events(rng, ids, passengers, vehicles, staff, anchor, args.window_days)
 
     files = [
         ("operators.jsonl", operators),
@@ -94,6 +102,9 @@ def cmd_generate(args: argparse.Namespace) -> int:
         ("cargo.jsonl", cargo),
         ("routes.jsonl", routes),
         ("orders.jsonl", orders),
+        ("passengers.jsonl", passengers),
+        ("cargo_journey_events.jsonl", cargo_journey_events),
+        ("passenger_boarding_events.jsonl", passenger_boarding_events),
         ("airports.jsonl", airports),
         ("aircraft_models.jsonl", models),
     ]

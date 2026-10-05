@@ -231,6 +231,72 @@ async function loadAll(dir: string): Promise<void> {
     })),
   });
 
+  // ── Passengers ─────────────────────────────────────────────────────────
+  const passengersFile = await readFile(join(dir, "passengers.jsonl"), "utf-8").catch(() => "");
+  const passengers = passengersFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
+  if (passengers.length > 0) {
+    console.log(`  passengers: ${passengers.length}`);
+    await prisma.passenger.createMany({
+      data: passengers.map((r) => ({
+        passengerId: r.passenger_id as string,
+        givenName: r.given_name as string,
+        familyName: r.family_name as string,
+        passengerType: r.passenger_type as string,
+        orderId: (r.order_id as string) ?? null,
+        operatorId: r.operator_id as string,
+        originIata: r.origin_iata as string,
+        destinationIata: r.destination_iata as string,
+        status: r.status as string,
+        validTime: toDate(r.valid_time),
+        schemaVersion: r.schema_version as number,
+        generatedAt: toDate(r.generated_at),
+      })),
+    });
+  }
+
+  // ── Cargo journey events ───────────────────────────────────────────────
+  const cjeFile = await readFile(join(dir, "cargo_journey_events.jsonl"), "utf-8").catch(() => "");
+  const cjeRecords = cjeFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
+  if (cjeRecords.length > 0) {
+    console.log(`  cargo_journey_events: ${cjeRecords.length}`);
+    await prisma.cargoJourneyEvent.createMany({
+      data: cjeRecords.map((r) => ({
+        eventId: r.event_id as string,
+        cargoId: r.cargo_id as string,
+        eventType: r.event_type as string,
+        locationIata: r.location_iata as string,
+        facilityId: (r.facility_id as string) ?? null,
+        vehicleId: (r.vehicle_id as string) ?? null,
+        sequence: r.sequence as number,
+        validTime: new Date(r.valid_time as string),
+        actorId: r.actor_id as string,
+        schemaVersion: r.schema_version as number,
+        generatedAt: toDate(r.generated_at),
+      })),
+    });
+  }
+
+  // ── Passenger boarding events ──────────────────────────────────────────
+  const pbeFile = await readFile(join(dir, "passenger_boarding_events.jsonl"), "utf-8").catch(() => "");
+  const pbeRecords = pbeFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
+  if (pbeRecords.length > 0) {
+    console.log(`  passenger_boarding_events: ${pbeRecords.length}`);
+    await prisma.passengerBoardingEvent.createMany({
+      data: pbeRecords.map((r) => ({
+        eventId: r.event_id as string,
+        passengerId: r.passenger_id as string,
+        eventType: r.event_type as string,
+        locationIata: r.location_iata as string,
+        vehicleId: (r.vehicle_id as string) ?? null,
+        sequence: r.sequence as number,
+        validTime: new Date(r.valid_time as string),
+        actorId: r.actor_id as string,
+        schemaVersion: r.schema_version as number,
+        generatedAt: toDate(r.generated_at),
+      })),
+    });
+  }
+
   console.log("Load complete.");
 }
 

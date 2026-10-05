@@ -224,4 +224,62 @@ model AsseticOrder {
 // Journal is managed via raw SQL (see db/migrations/001_initial_schema.sql).
 // Prisma does not manage this table's schema; we use $queryRaw for appends.
 // model JournalEntry is intentionally omitted from Prisma to keep the
-// append-only/hash-chain constraints in raw SQL.
+
+model Passenger {
+  passengerId     String   @id @map("passenger_id")
+  givenName       String   @map("given_name")
+  familyName      String   @map("family_name")
+  passengerType   String   @map("passenger_type")
+  orderId         String?  @map("order_id")
+  operatorId      String   @map("operator_id")
+  originIata      String   @map("origin_iata") @db.Char(3)
+  destinationIata String   @map("destination_iata") @db.Char(3)
+  status          String
+  validTime       DateTime @map("valid_time") @db.Date
+  schemaVersion   Int      @default(1) @map("schema_version")
+  generatedAt     DateTime @map("generated_at") @db.Date
+
+  @@index([operatorId])
+  @@index([orderId])
+  @@index([status])
+  @@map("passenger")
+}
+
+model CargoJourneyEvent {
+  eventId      String   @id @map("event_id")
+  cargoId      String   @map("cargo_id")
+  eventType    String   @map("event_type")
+  locationIata String   @map("location_iata") @db.Char(3)
+  facilityId   String?  @map("facility_id")
+  vehicleId    String?  @map("vehicle_id")
+  sequence     Int
+  validTime    DateTime @map("valid_time")
+  actorId      String   @map("actor_id")
+  schemaVersion Int      @default(1) @map("schema_version")
+  generatedAt  DateTime @map("generated_at") @db.Date
+
+  @@unique([cargoId, sequence])
+  @@index([cargoId, sequence])
+  @@index([eventType])
+  @@index([locationIata])
+  @@map("cargo_journey_event")
+}
+
+model PassengerBoardingEvent {
+  eventId      String   @id @map("event_id")
+  passengerId  String   @map("passenger_id")
+  eventType    String   @map("event_type")
+  locationIata String   @map("location_iata") @db.Char(3)
+  vehicleId    String?  @map("vehicle_id")
+  sequence     Int
+  validTime    DateTime @map("valid_time")
+  actorId      String   @map("actor_id")
+  schemaVersion Int      @default(1) @map("schema_version")
+  generatedAt  DateTime @map("generated_at") @db.Date
+
+  @@unique([passengerId, sequence])
+  @@index([passengerId, sequence])
+  @@index([eventType])
+  @@index([locationIata])
+  @@map("passenger_boarding_event")
+}
