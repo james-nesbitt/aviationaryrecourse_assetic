@@ -17,19 +17,18 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
+        "https://assetic.home.arpa/callback",
+        "http://assetic.home.arpa/callback",
         "http://localhost:5173/callback",
-        "http://localhost:3000/callback",
-        "http://localhost:8080/callback",
-        "http://127.0.0.1:5173/callback",
-        "http://assetic-ui:80/callback",
-        "http://localhost:30080/callback"
+        "http://localhost:30080/callback",
+        "http://127.0.0.1:5173/callback"
       ],
       "webOrigins": [
+        "https://assetic.home.arpa",
+        "http://assetic.home.arpa",
         "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "http://127.0.0.1:5173",
-        "http://localhost:30080"
+        "http://localhost:30080",
+        "http://127.0.0.1:5173"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"

@@ -108,16 +108,20 @@ export async function handleCallback(): Promise<void> {
 
   const redirectUri = window.location.origin + "/callback";
 
-  const res = await fetch(
-    buildUrl(cfg, "/token", {
-      client_id: cfg.clientId,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    }),
-    { method: "POST" }
-  );
+  const tokenUrl = `${cfg.keycloakUrl}/realms/${cfg.realm}/protocol/openid-connect/token`;
+  const body = new URLSearchParams({
+    client_id: cfg.clientId,
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
+  });
+
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
 
   if (!res.ok) {
     const body = await res.text();

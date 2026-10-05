@@ -19,7 +19,7 @@ spec:
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:25.0
-          args: ["start-dev", "--import-realm", "--hostname-strict=false"]
+          args: ["start-dev", "--import-realm", "--hostname-strict=false", "--http-relative-path=/auth"]
           env:
             - name: KEYCLOAK_ADMIN
               value: "admin"
@@ -29,6 +29,10 @@ spec:
               value: "dev-file"
             - name: KC_HTTP_ENABLED
               value: "true"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            - name: KC_HOSTNAME
+              value: "https://assetic.home.arpa"
           ports:
             - containerPort: 8080
               name: http
@@ -38,7 +42,7 @@ spec:
               readOnly: true
           readinessProbe:
             httpGet:
-              path: /realms/master
+              path: /auth/realms/master
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
