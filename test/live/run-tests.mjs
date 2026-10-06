@@ -179,7 +179,7 @@ async function testOperations(token) {
     if (!byRoute.has(row.route_id)) byRoute.set(row.route_id, []);
     byRoute.get(row.route_id).push(row);
   }
-  const day = (s) => Math.floor(Date.parse(`${s}T00:00:00Z`) / 86400000);
+  const day = (s) => Math.floor(Date.parse(s.length === 10 ? `${s}T00:00:00Z` : s) / 86400000);
   for (const [routeId, rows] of byRoute) {
     rows.sort((a, b) => day(a.valid_from) - day(b.valid_from));
     const open = rows.filter((r) => r.valid_to === null);
@@ -216,9 +216,10 @@ async function testOperations(token) {
     }
     const firstDepart = evRes.json.find((e) => e.event_type === "depart");
     if (firstDepart) {
-      const depTimes = op.legs.map((l) => new Date(l.scheduled_departure).getTime());
+      const parseTs = (s) => Date.parse(s.includes("T") && !s.endsWith("Z") ? `${s}Z` : s);
+      const depTimes = op.legs.map((l) => parseTs(l.scheduled_departure));
       assert(
-        depTimes.includes(new Date(firstDepart.valid_time).getTime()),
+        depTimes.includes(parseTs(firstDepart.valid_time)),
         `cargo ${delivered.cargo_id}: first depart matches a scheduled_departure`,
       );
     }
