@@ -23,6 +23,9 @@ vi.mock("../lib/prisma.js", () => ({
     facility: { findMany: vi.fn() },
     passenger: { findUnique: vi.fn() },
     transitEvent: { findMany: vi.fn() },
+    routeOperation: { findMany: vi.fn(), findUnique: vi.fn() },
+    routeAssignment: { findMany: vi.fn() },
+    vehicleMaintenance: { findMany: vi.fn() },
     $queryRaw: vi.fn(async () => []),
   },
 }));
@@ -164,6 +167,10 @@ describe("Domain routes", () => {
       "GET /api/customers",
       "GET /api/cargo",
       "GET /api/routes",
+      "GET /api/route-operations",
+      "GET /api/route-operations/:id",
+      "GET /api/route-assignments",
+      "GET /api/vehicle-maintenance",
       "GET /api/orders",
       "GET /api/airports",
       "GET /api/aircraft-models",
@@ -177,5 +184,14 @@ describe("Domain routes", () => {
     for (const path of expected) {
       expect(app.routes.has(path)).toBe(true);
     }
+  });
+
+  it("GET /api/route-operations passes vehicleId and status filters to prisma", async () => {
+    const route = app.routes.get("GET /api/route-operations");
+    if (!route) throw new Error("route not registered");
+    await route.handler({ query: { vehicleId: "veh-0001", status: "completed" } });
+    expect(prisma.routeOperation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { vehicleId: "veh-0001", status: "completed" } }),
+    );
   });
 });

@@ -13,7 +13,6 @@ interface Route {
     to_iata: string;
     scheduled_departure: string;
     scheduled_arrival: string;
-    cargo_ref?: string;
   }>;
   operator?: { name: string };
 }
@@ -78,7 +77,6 @@ export function RoutesView(): React.ReactElement {
                           <th style={subTh}>To</th>
                           <th style={subTh}>Departure</th>
                           <th style={subTh}>Arrival</th>
-                          <th style={subTh}>Cargo</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -89,7 +87,6 @@ export function RoutesView(): React.ReactElement {
                             <td style={subTd}>{leg.to_iata}</td>
                             <td style={subTd}>{leg.scheduled_departure}</td>
                             <td style={subTd}>{leg.scheduled_arrival}</td>
-                            <td style={subTd}>{leg.cargo_ref ?? "—"}</td>
                           </tr>
                         ))}
                       </tbody>

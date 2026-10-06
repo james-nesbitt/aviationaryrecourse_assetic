@@ -25,6 +25,11 @@ def anchor_date(seed: int, as_of: str | None) -> dt.date:
     return epoch + dt.timedelta(days=seed % 8000)
 
 
+def anchor_instant(anchor: dt.date) -> dt.datetime:
+    """Midday instant on the anchor date: the "now" for all status logic."""
+    return dt.datetime.combine(anchor, dt.time(12, 0))
+
+
 def window_start(anchor: dt.date, window_days: int) -> dt.date:
     return anchor - dt.timedelta(days=window_days)
 

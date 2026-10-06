@@ -18,9 +18,12 @@ from .generators import (
     generate_orders,
     generate_ownership_history,
     generate_passengers,
+    generate_route_assignments,
+    generate_route_operations,
     generate_routes,
-    generate_transit_events,
     generate_staff,
+    generate_transit_events,
+    generate_vehicle_maintenance,
     generate_vehicles,
 )
 from .ids import IdAssigner
@@ -34,11 +37,12 @@ DEFAULTS = {
     "staff": 60,
     "facilities": 12,
     "customers": 10,
-    "cargo": 80,
     "routes": 25,
     "orders": 30,
-    "passengers": 40,
 }
+
+# subjects per day (at medium scale) for rate-driven entities
+RATES = {"cargo": 0.25, "passengers": 0.5}
 
 
 def _scale_count(args: argparse.Namespace, key: str) -> int:
@@ -47,6 +51,15 @@ def _scale_count(args: argparse.Namespace, key: str) -> int:
     if explicit is not None:
         return explicit
     return max(1, round(DEFAULTS[key] * SCALE_FACTORS[args.scale]))
+
+
+def _rate_count(args: argparse.Namespace, key: str) -> int:
+    """Explicit --num-X wins; otherwise subjects/day scaled by the window."""
+    explicit = getattr(args, f"num_{key}")
+    if explicit is not None:
+        return explicit
+    rate = getattr(args, f"{key}_per_day") or RATES[key]
+    return max(1, round(rate * args.window_days * SCALE_FACTORS[args.scale]))
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> int:
@@ -73,10 +86,10 @@ def cmd_generate(args: argparse.Namespace) -> int:
                     "staff": _scale_count(args, "staff"),
                     "facilities": _scale_count(args, "facilities"),
                     "customers": _scale_count(args, "customers"),
-                    "cargo": _scale_count(args, "cargo"),
                     "routes": _scale_count(args, "routes"),
                     "orders": _scale_count(args, "orders"),
-                    "passengers": _scale_count(args, "passengers")}
+                    "cargo": _rate_count(args, "cargo"),
+                    "passengers": _rate_count(args, "passengers")}
     operators = generate_operators(rng, ids, pools, airports, counts["operators"], anchor, args.window_days)
     vehicles = generate_vehicles(rng, ids, pools, operators, models, airports, counts["vehicles"], anchor)
     ownership = generate_ownership_history(rng, vehicles, operators, anchor, args.window_days)
@@ -84,11 +97,14 @@ def cmd_generate(args: argparse.Namespace) -> int:
     facilities = generate_facilities(rng, ids, operators, airports, counts["facilities"], anchor)
     account_managers = [s for s in staff if s["role"] == "account_manager"]
     customers = generate_carrier_customers(rng, ids, pools, operators, account_managers, counts["customers"], anchor, args.window_days)
-    cargo = generate_cargo(rng, ids, vehicles, operators, customers, airports, counts["cargo"], anchor, args.window_days)
-    routes = generate_routes(rng, ids, vehicles, operators, airports, models, cargo, counts["routes"], anchor)
-    orders = generate_orders(rng, ids, pools, customers, routes, staff, None, airports, models, counts["orders"], anchor, args.window_days)
-    passengers = generate_passengers(rng, ids, pools, orders, operators, airports, counts["passengers"], anchor, args.window_days)
-    transit_events = generate_transit_events(rng, ids, cargo, passengers, facilities, vehicles, staff, airports, anchor, args.window_days)
+    routes = generate_routes(rng, ids, vehicles, operators, airports, models, counts["routes"], anchor, args.window_days)
+    maintenance = generate_vehicle_maintenance(rng, ids, vehicles, facilities, anchor, args.window_days)
+    assignments = generate_route_assignments(rng, ids, routes, vehicles, maintenance, anchor)
+    operations = generate_route_operations(ids, routes, assignments, maintenance, anchor)
+    cargo = generate_cargo(rng, ids, operations, routes, operators, customers, counts["cargo"], anchor)
+    orders = generate_orders(rng, ids, pools, customers, operations, staff, None, airports, models, counts["orders"], anchor, args.window_days)
+    passengers = generate_passengers(rng, ids, pools, orders, operations, routes, operators, counts["passengers"], anchor)
+    transit_events = generate_transit_events(rng, ids, cargo, passengers, operations, facilities, staff, anchor)
 
     files = [
         ("operators.jsonl", operators),
@@ -97,8 +113,11 @@ def cmd_generate(args: argparse.Namespace) -> int:
         ("staff.jsonl", staff),
         ("facilities.jsonl", facilities),
         ("carrier_customers.jsonl", customers),
-        ("cargo.jsonl", cargo),
         ("routes.jsonl", routes),
+        ("vehicle_maintenance.jsonl", maintenance),
+        ("route_assignments.jsonl", assignments),
+        ("route_operations.jsonl", operations),
+        ("cargo.jsonl", cargo),
         ("orders.jsonl", orders),
         ("passengers.jsonl", passengers),
         ("transit_events.jsonl", transit_events),
@@ -151,6 +170,11 @@ def build_parser() -> argparse.ArgumentParser:
     for key in DEFAULTS:
         gen.add_argument(f"--num-{key.replace('_', '-')}", type=int, default=None,
                          help=f"exact count (overrides --scale) for {key} (default {DEFAULTS[key]})")
+    for key, rate in RATES.items():
+        gen.add_argument(f"--num-{key.replace('_', '-')}", type=int, default=None,
+                         help=f"exact count (overrides rate) for {key}")
+        gen.add_argument(f"--{key.replace('_', '-')}-per-day", type=float, default=None,
+                         help=f"subjects per day (default {rate}) for {key}, scaled by --window-days")
     gen.set_defaults(func=cmd_generate)
 
     refresh = sub.add_parser("refresh-airports", help="download NA/EU airports into the cache")

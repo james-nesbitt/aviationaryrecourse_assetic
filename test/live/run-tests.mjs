@@ -111,7 +111,9 @@ async function testDataEndpoints(token) {
     { path: "/api/airports", min: 1, label: "Airports" },
     { path: "/api/aircraft-models", min: 1, label: "Aircraft Models" },
     { path: "/api/passengers", min: 1, label: "Passengers" },
-    { path: "/api/transit/transitions", min: 13, label: "Transitions" },
+    { path: "/api/route-operations", min: 1, label: "Route operations" },
+    { path: "/api/route-assignments", min: 1, label: "Route assignments" },
+    { path: "/api/vehicle-maintenance", min: 1, label: "Vehicle maintenance" },
   ];
 
   for (const { path, min, label } of endpoints) {
@@ -163,6 +165,84 @@ async function testTransit(token) {
 
   await checkChain("/api/cargo", cargoRes.json, "scheduled", "delivered", "Cargo", 5);
   await checkChain("/api/passengers", paxRes.json, "booked", "disembarked", "Passenger", 5);
+}
+
+async function testOperations(token) {
+  console.log("\n── Route operations (admin) ──");
+
+  // 1. assignments: per route contiguous, one open, at least one maintenance_cover
+  const asgRes = await fetchJson(`${BASE_URL}/api/route-assignments`, { headers: authHeader(token) });
+  assert(asgRes.status === 200, "GET /api/route-assignments returns 200");
+  assert(Array.isArray(asgRes.json), "GET /api/route-assignments returns array");
+  const byRoute = new Map();
+  for (const row of asgRes.json) {
+    if (!byRoute.has(row.route_id)) byRoute.set(row.route_id, []);
+    byRoute.get(row.route_id).push(row);
+  }
+  const day = (s) => Math.floor(Date.parse(`${s}T00:00:00Z`) / 86400000);
+  for (const [routeId, rows] of byRoute) {
+    rows.sort((a, b) => day(a.valid_from) - day(b.valid_from));
+    const open = rows.filter((r) => r.valid_to === null);
+    assert(open.length === 1, `route ${routeId}: exactly one open assignment (got ${open.length})`);
+    for (let i = 1; i < rows.length; i++) {
+      assert(
+        day(rows[i].valid_from) === day(rows[i - 1].valid_to) + 1,
+        `route ${routeId}: assignments contiguous at ${rows[i].valid_from}`,
+      );
+    }
+  }
+  assert(
+    asgRes.json.some((r) => r.reason === "maintenance_cover"),
+    "at least one assignment has reason maintenance_cover",
+  );
+
+  // 2. delivered cargo: events match the operation timetable and vehicle
+  const cargoRes = await fetchJson(`${BASE_URL}/api/cargo`, { headers: authHeader(token) });
+  const delivered = cargoRes.json.find((r) => r.operation_id && r.state === "delivered");
+  if (delivered) {
+    const opRes = await fetchJson(`${BASE_URL}/api/route-operations/${delivered.operation_id}`, {
+      headers: authHeader(token),
+    });
+    assert(opRes.status === 200, "GET /api/route-operations/:id returns 200");
+    const op = opRes.json;
+    const evRes = await fetchJson(`${BASE_URL}/api/cargo/${delivered.cargo_id}/events`, {
+      headers: authHeader(token),
+    });
+    assert(evRes.status === 200, "GET /api/cargo/:id/events returns 200");
+    for (const ev of evRes.json) {
+      if (ev.vehicle_id !== null) {
+        assert(ev.vehicle_id === op.vehicle_id, `cargo ${delivered.cargo_id}: event vehicle matches operation vehicle`);
+      }
+    }
+    const firstDepart = evRes.json.find((e) => e.event_type === "depart");
+    if (firstDepart) {
+      const depTimes = op.legs.map((l) => new Date(l.scheduled_departure).getTime());
+      assert(
+        depTimes.includes(new Date(firstDepart.valid_time).getTime()),
+        `cargo ${delivered.cargo_id}: first depart matches a scheduled_departure`,
+      );
+    }
+  } else {
+    failures.push("Route operations: no delivered cargo with operation_id to check");
+    failed++;
+  }
+
+  // 3. cancelled operations: vehicle in maintenance on the operating date
+  const cancelRes = await fetchJson(`${BASE_URL}/api/route-operations?status=cancelled`, {
+    headers: authHeader(token),
+  });
+  assert(cancelRes.status === 200, "GET /api/route-operations?status=cancelled returns 200");
+  for (const op of cancelRes.json) {
+    const mntRes = await fetchJson(`${BASE_URL}/api/vehicle-maintenance?vehicleId=${op.vehicle_id}`, {
+      headers: authHeader(token),
+    });
+    if (mntRes.status !== 200 || !Array.isArray(mntRes.json)) continue;
+    const opDay = day(op.operating_date);
+    assert(
+      mntRes.json.some((w) => day(w.start_date) <= opDay && opDay <= day(w.end_date)),
+      `operation ${op.operation_id}: vehicle has a maintenance window covering ${op.operating_date}`,
+    );
+  }
 }
 
 async function testJournal(token) {
@@ -273,6 +353,7 @@ async function main() {
     await testDataEndpoints(adminToken);
     await testJournal(adminToken);
     await testTransit(adminToken);
+    await testOperations(adminToken);
     await testPersonas();
   }
 

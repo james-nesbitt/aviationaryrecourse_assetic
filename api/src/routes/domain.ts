@@ -84,6 +84,48 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     });
   });
 
+  // ── Route operations (dated executions) ────────────────────────────────
+  app.get("/api/route-operations", async (request) => {
+    const query = request.query as { routeId?: string; vehicleId?: string; status?: string };
+    const where: Record<string, unknown> = {};
+    if (query.routeId) where.routeId = query.routeId;
+    if (query.vehicleId) where.vehicleId = query.vehicleId;
+    if (query.status) where.status = query.status;
+    return prisma.routeOperation.findMany({
+      where,
+      orderBy: [{ operatingDate: "asc" }, { routeId: "asc" }],
+    });
+  });
+
+  app.get("/api/route-operations/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.routeOperation.findUnique({ where: { operationId: id } });
+  });
+
+  // ── Route assignments ──────────────────────────────────────────────────
+  app.get("/api/route-assignments", async (request) => {
+    const query = request.query as { routeId?: string; vehicleId?: string };
+    const where: Record<string, unknown> = {};
+    if (query.routeId) where.routeId = query.routeId;
+    if (query.vehicleId) where.vehicleId = query.vehicleId;
+    return prisma.routeAssignment.findMany({
+      where,
+      orderBy: [{ routeId: "asc" }, { validFrom: "asc" }],
+    });
+  });
+
+  // ── Vehicle maintenance ────────────────────────────────────────────────
+  app.get("/api/vehicle-maintenance", async (request) => {
+    const query = request.query as { vehicleId?: string; status?: string };
+    const where: Record<string, unknown> = {};
+    if (query.vehicleId) where.vehicleId = query.vehicleId;
+    if (query.status) where.status = query.status;
+    return prisma.vehicleMaintenance.findMany({
+      where,
+      orderBy: [{ vehicleId: "asc" }, { startDate: "asc" }],
+    });
+  });
+
   // ── Orders ─────────────────────────────────────────────────────────────
   app.get("/api/orders", async (request) => {
     const query = request.query as { status?: string; operatorId?: string };
