@@ -163,7 +163,6 @@ model Cargo {
   assignedVehicleId String?  @map("assigned_vehicle_id")
   weightKg          Int      @map("weight_kg")
   cargoType         String   @map("cargo_type")
-  status            String
   validTime         DateTime @map("valid_time") @db.Date
   schemaVersion     Int      @default(1) @map("schema_version")
   generatedAt       DateTime @map("generated_at") @db.Date
@@ -173,7 +172,6 @@ model Cargo {
 
   @@index([customerId])
   @@index([operatorId])
-  @@index([status])
   @@map("cargo")
 }
 
@@ -234,52 +232,33 @@ model Passenger {
   operatorId      String   @map("operator_id")
   originIata      String   @map("origin_iata") @db.Char(3)
   destinationIata String   @map("destination_iata") @db.Char(3)
-  status          String
   validTime       DateTime @map("valid_time") @db.Date
   schemaVersion   Int      @default(1) @map("schema_version")
   generatedAt     DateTime @map("generated_at") @db.Date
 
   @@index([operatorId])
   @@index([orderId])
-  @@index([status])
   @@map("passenger")
 }
 
-model CargoJourneyEvent {
-  eventId      String   @id @map("event_id")
-  cargoId      String   @map("cargo_id")
-  eventType    String   @map("event_type")
-  locationIata String   @map("location_iata") @db.Char(3)
-  facilityId   String?  @map("facility_id")
-  vehicleId    String?  @map("vehicle_id")
-  sequence     Int
-  validTime    DateTime @map("valid_time")
-  actorId      String   @map("actor_id")
+model TransitEvent {
+  eventId       String   @id @map("event_id")
+  subjectType   String   @map("subject_type")
+  cargoId       String?  @map("cargo_id")
+  passengerId   String?  @map("passenger_id")
+  sequence      Int
+  eventType     String   @map("event_type")
+  fromState     String   @map("from_state")
+  toState       String   @map("to_state")
+  locationIata  String   @map("location_iata") @db.Char(3)
+  vehicleId     String?  @map("vehicle_id")
+  facilityId    String?  @map("facility_id")
+  actorId       String?  @map("actor_id")
+  validTime     DateTime @map("valid_time")
   schemaVersion Int      @default(1) @map("schema_version")
-  generatedAt  DateTime @map("generated_at") @db.Date
+  generatedAt   DateTime @map("generated_at") @db.Date
 
-  @@unique([cargoId, sequence])
   @@index([cargoId, sequence])
-  @@index([eventType])
-  @@index([locationIata])
-  @@map("cargo_journey_event")
-}
-
-model PassengerBoardingEvent {
-  eventId      String   @id @map("event_id")
-  passengerId  String   @map("passenger_id")
-  eventType    String   @map("event_type")
-  locationIata String   @map("location_iata") @db.Char(3)
-  vehicleId    String?  @map("vehicle_id")
-  sequence     Int
-  validTime    DateTime @map("valid_time")
-  actorId      String   @map("actor_id")
-  schemaVersion Int      @default(1) @map("schema_version")
-  generatedAt  DateTime @map("generated_at") @db.Date
-
-  @@unique([passengerId, sequence])
   @@index([passengerId, sequence])
-  @@index([eventType])
-  @@index([locationIata])
-  @@map("passenger_boarding_event")
+  @@map("transit_event")
 }

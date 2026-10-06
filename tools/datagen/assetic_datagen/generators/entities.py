@@ -384,8 +384,8 @@ def generate_cargo(
                 weights=[55, 15, 10, 10, 10],
             )[0],
             "status": rng.choices(
-                ["scheduled", "loaded", "in_transit", "delivered"],
-                weights=[20, 25, 25, 30],
+                ["picked_up", "loaded", "in_transit", "arrived", "delivered"],
+                weights=[15, 20, 25, 15, 25],
             )[0],
             "valid_time": iso(random_date_in_window(rng, window_start(anchor, window_days), anchor)),
             "schema_version": SCHEMA_VERSION,
@@ -433,7 +433,7 @@ def generate_routes(
     # open cargo shipments per cargo operator, for optional leg references
     open_cargo_by_op: dict[str, list[str]] = {}
     for rec in cargo:
-        if rec["status"] in ("scheduled", "loaded", "in_transit"):
+        if rec["status"] != "delivered":
             open_cargo_by_op.setdefault(rec["operator_id"], []).append(rec["cargo_id"])
     for i in range(n):
         op = eligible_ops[i % len(eligible_ops)] if i < len(eligible_ops) else rng.choice(eligible_ops)
@@ -676,8 +676,8 @@ def generate_passengers(
             "origin_iata": origin,
             "destination_iata": dest,
             "status": rng.choices(
-                ["checked_in", "boarded", "in_transit", "arrived", "disembarked"],
-                weights=[15, 25, 25, 25, 10],
+                ["booked", "checked_in", "boarded", "in_transit", "arrived", "disembarked"],
+                weights=[10, 15, 20, 20, 25, 10],
             )[0],
             "valid_time": iso(random_date_in_window(rng, start, anchor)),
             "schema_version": SCHEMA_VERSION,
@@ -744,131 +744,26 @@ def _aircraft_by_op(vehicles: list[dict[str, Any]]) -> dict[str, list[dict[str, 
     return by_op
 
 
-def generate_cargo_journey_events(
+def generate_transit_events(
     rng: random.Random, ids: IdAssigner,
-    cargo: list[dict[str, Any]], facilities: list[dict[str, Any]],
-    vehicles: list[dict[str, Any]], staff: list[dict[str, Any]],
-    airports: list[dict[str, Any]], anchor: dt.date, window_days: int,
+    cargo: list[dict[str, Any]], passengers: list[dict[str, Any]],
+    facilities: list[dict[str, Any]], vehicles: list[dict[str, Any]],
+    staff: list[dict[str, Any]], airports: list[dict[str, Any]],
+    anchor: dt.date, window_days: int,
 ) -> list[dict[str, Any]]:
-    """Location-tracking events for each cargo shipment's journey.
+    """Unified state-transition events for cargo and passengers.
 
-    For every cargo shipment a strictly-increasing chain of events is emitted,
-    starting at ``pickup`` at the origin airport. The depth of the chain
-    reflects the shipment ``status``: ``scheduled`` ships have only been
-    picked up; ``loaded`` ships are loaded at the origin; ``in_transit`` ships
-    have departed (and may have arrived at an intermediate stop);
-    ``delivered`` ships reach the destination, possibly via a warehouse hold
-    and a transfer. ``warehouse_hold`` events reference a warehouse facility at
-    the arrival airport when one exists; ``loaded``/``departed``/``arrived``
-    events reference the carrying aircraft vehicle; the ``actor_id`` is a
-    ground-crew staff member at the fulfilling operator. Each event's
-    ``valid_time`` is a strictly-increasing datetime along the chain.
+    One ``transit_event`` chain per subject, driven by the entity's oracle
+    ``status`` (the terminal fine state the chain must reach). Each event
+    records a named verb (``event_type``) and the transition it performs
+    (``from_state -> to_state``); every transition must exist in the DB's
+    ``transit_transition`` lookup or the load fails. Chain continuity
+    (event N ``from_state`` == event N-1 ``to_state``) is asserted here.
+    Cargo chains may pass through an intermediate airport, optionally with a
+    warehouse hold; passenger chains run origin -> destination directly.
     """
     airport_iatas = [a["iata"] for a in airports]
     warehouses_by_airport = _warehouses_by_airport(facilities)
-    aircraft_by_op = _aircraft_by_op(vehicles)
-    ground_crew_by_op = _ground_crew_by_op(staff)
-    start = window_start(anchor, window_days)
-
-    def actor_for(op_id: str) -> str | None:
-        crew = ground_crew_by_op.get(op_id)
-        return rng.choice(crew) if crew else None
-
-    def vehicle_for(op_id: str) -> str | None:
-        fleet = aircraft_by_op.get(op_id)
-        return rng.choice(fleet)["vehicle_id"] if fleet else None
-
-    events: list[dict[str, Any]] = []
-    for rec in cargo:
-        op_id = rec["operator_id"]
-        origin = rec["origin_iata"]
-        dest = rec["destination_iata"]
-        status = rec["status"]
-        veh_id = vehicle_for(op_id)
-        chain_start = len(events)
-        # chain anchor datetime within the generation window
-        chain_dt = dt.datetime.combine(
-            random_date_in_window(rng, start, anchor),
-            dt.time(rng.randint(0, 23), rng.choice([0, 15, 30, 45])),
-        )
-
-        def advance(min_h: int, max_h: int) -> None:
-            nonlocal chain_dt
-            chain_dt = chain_dt + dt.timedelta(hours=rng.randint(min_h, max_h))
-
-        def emit(event_type: str, location: str, *, facility_id: str | None = None,
-                 vehicle_id: str | None = None) -> None:
-            events.append({
-                "event_id": ids.next("cje"),
-                "cargo_id": rec["cargo_id"],
-                "event_type": event_type,
-                "location_iata": location,
-                "facility_id": facility_id,
-                "vehicle_id": vehicle_id,
-                "sequence": len(events) - chain_start + 1,
-                "valid_time": chain_dt.isoformat(),
-                "actor_id": actor_for(op_id),
-                "schema_version": SCHEMA_VERSION,
-                "generated_at": iso(anchor),
-            })
-
-        # every shipment starts with pickup at the origin
-        emit("pickup", origin)
-        # the airport the shipment has most recently arrived at
-        arrival_iata = origin
-        if status in ("loaded", "in_transit", "delivered"):
-            advance(1, 3)
-            emit("loaded", origin, vehicle_id=veh_id)
-        if status in ("in_transit", "delivered"):
-            advance(2, 6)
-            emit("departed", origin, vehicle_id=veh_id)
-            # optionally arrive at an intermediate airport en route; a transit
-            # stop with a warehouse is preferred so holds are representable
-            intermediates = [i for i in airport_iatas if i not in (origin, dest)]
-            with_warehouse = [i for i in intermediates if warehouses_by_airport.get(i)]
-            if intermediates and rng.random() < 0.5:
-                arrival_iata = rng.choice(with_warehouse or intermediates)
-                advance(3, 10)
-                emit("arrived", arrival_iata, vehicle_id=veh_id)
-            elif status == "delivered":
-                arrival_iata = dest
-                advance(3, 10)
-                emit("arrived", dest, vehicle_id=veh_id)
-        if status == "delivered":
-            # optionally hold at a warehouse facility at the arrival airport
-            holds = warehouses_by_airport.get(arrival_iata)
-            if holds and rng.random() < 0.5:
-                advance(2, 8)
-                emit("warehouse_hold", arrival_iata, facility_id=rng.choice(holds))
-                # a transfer may move the shipment out of the hold for re-loading
-                if rng.random() < 0.5:
-                    advance(1, 4)
-                    emit("transferred", arrival_iata)
-                    advance(1, 3)
-                    emit("loaded", arrival_iata, vehicle_id=veh_id)
-            advance(3, 12)
-            emit("delivered", dest, vehicle_id=veh_id)
-
-    return events
-
-
-def generate_passenger_boarding_events(
-    rng: random.Random, ids: IdAssigner,
-    passengers: list[dict[str, Any]], vehicles: list[dict[str, Any]],
-    staff: list[dict[str, Any]], anchor: dt.date, window_days: int,
-) -> list[dict[str, Any]]:
-    """Boarding/location events for each passenger.
-
-    For every passenger a strictly-increasing chain of events is emitted,
-    starting with ``checked_in`` at the origin airport. The depth of the
-    chain reflects the passenger ``status``: ``checked_in`` passengers have
-    only checked in; ``boarded`` adds the boarding event at the origin;
-    ``in_transit`` adds the departure; ``arrived`` adds arrival at the
-    destination; ``disembarked`` completes the chain at the destination.
-    ``boarded``/``departed``/``arrived`` events reference the carrying aircraft
-    vehicle. The ``actor_id`` is a flight-crew member for boarding and a
-    ground-crew member for check-in.
-    """
     aircraft_by_op = _aircraft_by_op(vehicles)
     ground_crew_by_op = _ground_crew_by_op(staff)
     flight_crew_by_op = _flight_crew_by_op(staff)
@@ -887,50 +782,128 @@ def generate_passenger_boarding_events(
         return rng.choice(crew) if crew else None
 
     events: list[dict[str, Any]] = []
+
+    def make_emit(subject_type: str, subject_id: str,
+                  chain_dt_ref: dict[str, dt.datetime],
+                  current_state_ref: dict[str, str]):
+        counter = {"seq": 0}
+
+        def advance(min_h: int, max_h: int) -> None:
+            chain_dt_ref["dt"] = chain_dt_ref["dt"] + dt.timedelta(
+                hours=rng.randint(min_h, max_h))
+
+        def emit(event_type: str, from_state: str, to_state: str, location: str, *,
+                 vehicle_id: str | None = None, facility_id: str | None = None,
+                 actor_id: str | None = None) -> None:
+            if from_state != current_state_ref["state"]:
+                raise AssertionError(
+                    f"chain continuity violation for {subject_type} {subject_id}: "
+                    f"emit {from_state}->{to_state} but current state is "
+                    f"{current_state_ref['state']}"
+                )
+            counter["seq"] += 1
+            events.append({
+                "event_id": ids.next("tev"),
+                "subject_type": subject_type,
+                "cargo_id": subject_id if subject_type == "cargo" else None,
+                "passenger_id": subject_id if subject_type == "passenger" else None,
+                "sequence": counter["seq"],
+                "event_type": event_type,
+                "from_state": from_state,
+                "to_state": to_state,
+                "location_iata": location,
+                "vehicle_id": vehicle_id,
+                "facility_id": facility_id,
+                "actor_id": actor_id,
+                "valid_time": chain_dt_ref["dt"].isoformat(),
+                "schema_version": SCHEMA_VERSION,
+                "generated_at": iso(anchor),
+            })
+            current_state_ref["state"] = to_state
+
+        return emit, advance
+
+    # -------------------------------------------------------------- cargo --
+    for rec in cargo:
+        op_id = rec["operator_id"]
+        origin = rec["origin_iata"]
+        dest = rec["destination_iata"]
+        status = rec["status"]
+        veh = vehicle_for(op_id)
+        g = ground_actor(op_id)
+        chain_dt_ref = {"dt": dt.datetime.combine(
+            random_date_in_window(rng, start, anchor),
+            dt.time(rng.randint(0, 23), rng.choice([0, 15, 30, 45])),
+        )}
+        current_state_ref = {"state": "scheduled"}
+        emit, advance = make_emit("cargo", rec["cargo_id"], chain_dt_ref, current_state_ref)
+
+        emit("pickup", "scheduled", "picked_up", origin, actor_id=g)
+        if status in ("loaded", "in_transit", "arrived", "delivered"):
+            advance(1, 3)
+            emit("load", "picked_up", "loaded", origin, vehicle_id=veh, actor_id=g)
+        if status in ("in_transit", "arrived", "delivered"):
+            advance(2, 6)
+            emit("depart", "loaded", "in_transit", origin, vehicle_id=veh, actor_id=g)
+        # the airport the shipment has most recently arrived at; an
+        # intermediate stop with a warehouse is preferred so holds are
+        # representable
+        x = dest
+        if status in ("arrived", "delivered"):
+            intermediates = [i for i in airport_iatas if i not in (origin, dest)]
+            with_warehouse = [i for i in intermediates if warehouses_by_airport.get(i)]
+            if intermediates and rng.random() < 0.5:
+                x = rng.choice(with_warehouse or intermediates)
+            advance(3, 10)
+            emit("arrive", "in_transit", "arrived", x, vehicle_id=veh, actor_id=g)
+        if status == "delivered":
+            if x != dest:
+                holds = warehouses_by_airport.get(x)
+                if holds and rng.random() < 0.5:
+                    advance(2, 8)
+                    emit("hold", "arrived", "held", x,
+                         facility_id=rng.choice(holds), actor_id=g)
+                    advance(1, 4)
+                    emit("load", "held", "loaded", x, vehicle_id=veh, actor_id=g)
+                else:
+                    advance(1, 4)
+                    emit("load", "arrived", "loaded", x, vehicle_id=veh, actor_id=g)
+                advance(2, 6)
+                emit("depart", "loaded", "in_transit", x, vehicle_id=veh, actor_id=g)
+                advance(3, 10)
+                emit("arrive", "in_transit", "arrived", dest, vehicle_id=veh, actor_id=g)
+            advance(3, 12)
+            emit("deliver", "arrived", "delivered", dest, vehicle_id=veh, actor_id=g)
+
+    # --------------------------------------------------------- passenger --
     for pax in passengers:
         op_id = pax["operator_id"]
         origin = pax["origin_iata"]
         dest = pax["destination_iata"]
         status = pax["status"]
-        veh_id = vehicle_for(op_id)
-        chain_start = len(events)
-        chain_dt = dt.datetime.combine(
+        veh = vehicle_for(op_id)
+        g = ground_actor(op_id)
+        f = flight_actor(op_id)
+        chain_dt_ref = {"dt": dt.datetime.combine(
             random_date_in_window(rng, start, anchor),
             dt.time(rng.randint(0, 23), rng.choice([0, 15, 30, 45])),
-        )
+        )}
+        current_state_ref = {"state": "booked"}
+        emit, advance = make_emit("passenger", pax["passenger_id"], chain_dt_ref, current_state_ref)
 
-        def advance(min_h: int, max_h: int) -> None:
-            nonlocal chain_dt
-            chain_dt = chain_dt + dt.timedelta(hours=rng.randint(min_h, max_h))
-
-        def emit(event_type: str, location: str, *, vehicle_id: str | None = None,
-                 actor_id: str | None = None) -> None:
-            events.append({
-                "event_id": ids.next("pbe"),
-                "passenger_id": pax["passenger_id"],
-                "event_type": event_type,
-                "location_iata": location,
-                "vehicle_id": vehicle_id,
-                "sequence": len(events) - chain_start + 1,
-                "valid_time": chain_dt.isoformat(),
-                "actor_id": actor_id,
-                "schema_version": SCHEMA_VERSION,
-                "generated_at": iso(anchor),
-            })
-
-        # check-in is always the first event, performed by ground crew
-        emit("checked_in", origin, actor_id=ground_actor(op_id))
+        if status in ("checked_in", "boarded", "in_transit", "arrived", "disembarked"):
+            emit("check_in", "booked", "checked_in", origin, actor_id=g)
         if status in ("boarded", "in_transit", "arrived", "disembarked"):
             advance(1, 3)
-            emit("boarded", origin, vehicle_id=veh_id, actor_id=flight_actor(op_id))
+            emit("board", "checked_in", "boarded", origin, vehicle_id=veh, actor_id=f)
         if status in ("in_transit", "arrived", "disembarked"):
             advance(2, 5)
-            emit("departed", origin, vehicle_id=veh_id, actor_id=flight_actor(op_id))
+            emit("depart", "boarded", "in_transit", origin, vehicle_id=veh, actor_id=f)
         if status in ("arrived", "disembarked"):
             advance(3, 10)
-            emit("arrived", dest, vehicle_id=veh_id, actor_id=flight_actor(op_id))
+            emit("arrive", "in_transit", "arrived", dest, vehicle_id=veh, actor_id=f)
         if status == "disembarked":
             advance(1, 2)
-            emit("disembarked", dest, actor_id=flight_actor(op_id))
+            emit("disembark", "arrived", "disembarked", dest, actor_id=f)
 
     return events

@@ -21,6 +21,9 @@ vi.mock("../lib/prisma.js", () => ({
     airport: { findMany: vi.fn() },
     aircraftModel: { findMany: vi.fn() },
     facility: { findMany: vi.fn() },
+    passenger: { findUnique: vi.fn() },
+    transitEvent: { findMany: vi.fn() },
+    $queryRaw: vi.fn(async () => []),
   },
 }));
 
@@ -141,6 +144,18 @@ describe("Domain routes", () => {
     );
   });
 
+  it("GET /api/cargo/:id/events calls prisma.transitEvent.findMany ordered by sequence", async () => {
+    const mocked = vi.mocked(prisma.transitEvent.findMany);
+    mocked.mockResolvedValue([]);
+    const route = app.routes.get("GET /api/cargo/:id/events");
+    expect(route).toBeDefined();
+    await route!.handler({ user: mockUser, params: { id: "cgo-0001" } });
+    expect(mocked).toHaveBeenCalledWith({
+      where: { cargoId: "cgo-0001" },
+      orderBy: { sequence: "asc" },
+    });
+  });
+
   it("registers all expected read endpoints", () => {
     const expected = [
       "GET /api/operators",
@@ -153,6 +168,11 @@ describe("Domain routes", () => {
       "GET /api/airports",
       "GET /api/aircraft-models",
       "GET /api/facilities",
+      "GET /api/passengers",
+      "GET /api/passengers/:id",
+      "GET /api/cargo/:id/events",
+      "GET /api/passengers/:id/events",
+      "GET /api/transit/transitions",
     ];
     for (const path of expected) {
       expect(app.routes.has(path)).toBe(true);

@@ -110,7 +110,8 @@ async function testDataEndpoints(token) {
     { path: "/api/customers", min: 1, label: "Customers" },
     { path: "/api/airports", min: 1, label: "Airports" },
     { path: "/api/aircraft-models", min: 1, label: "Aircraft Models" },
-    { path: "/api/facilities", min: 0, label: "Facilities" },
+    { path: "/api/passengers", min: 1, label: "Passengers" },
+    { path: "/api/transit/transitions", min: 13, label: "Transitions" },
   ];
 
   for (const { path, min, label } of endpoints) {
@@ -121,6 +122,47 @@ async function testDataEndpoints(token) {
     assert(Array.isArray(json), `GET ${path} returns array`);
     assert(json.length >= min, `${label}: ${json.length} records (>= ${min})`);
   }
+}
+
+async function testTransit(token) {
+  console.log("\n── Transit event chains (admin) ──");
+  const cargoStates = new Set(["scheduled", "picked_up", "loaded", "in_transit", "arrived", "held", "delivered"]);
+  const paxStates = new Set(["booked", "checked_in", "boarded", "in_transit", "arrived", "disembarked"]);
+
+  const cargoRes = await fetchJson(`${BASE_URL}/api/cargo`, { headers: authHeader(token) });
+  assert(cargoRes.status === 200, "GET /api/cargo returns 200");
+  assert(Array.isArray(cargoRes.json), "GET /api/cargo returns array");
+  assert(cargoRes.json.every((r) => cargoStates.has(r.state)), "every cargo row has a valid state");
+
+  const paxRes = await fetchJson(`${BASE_URL}/api/passengers`, { headers: authHeader(token) });
+  assert(paxRes.status === 200, "GET /api/passengers returns 200");
+  assert(Array.isArray(paxRes.json), "GET /api/passengers returns array");
+  assert(paxRes.json.every((r) => paxStates.has(r.state)), "every passenger row has a valid state");
+
+  async function checkChain(subjectPath, list, initialState, terminalState, label, minLength) {
+    const row = list.find((r) => r.state === terminalState);
+    if (!row) {
+      failures.push(`${label}: no ${terminalState} subject to check`);
+      failed++;
+      return;
+    }
+    const id = label === "Cargo" ? row.cargo_id : row.passenger_id;
+    const { status, json } = await fetchJson(`${BASE_URL}${subjectPath}/${id}/events`, {
+      headers: authHeader(token),
+    });
+    assert(status === 200, `GET ${subjectPath}/${id}/events returns 200`);
+    assert(Array.isArray(json), `GET ${subjectPath}/${id}/events returns array`);
+    assert(json.length >= minLength, `${label} ${terminalState} chain has >= ${minLength} events (got ${json.length})`);
+    assert(json[0].from_state === initialState, `${label} chain starts at ${initialState}`);
+    assert(json[json.length - 1].to_state === terminalState, `${label} chain ends at ${terminalState}`);
+    for (let i = 1; i < json.length; i++) {
+      assert(json[i].from_state === json[i - 1].to_state, `${label} chain continuous at event ${i}`);
+    }
+    console.log(`  ✓ ${label} ${id}: ${json.map((e) => `${e.from_state}->${e.to_state}`).join(", ")}`);
+  }
+
+  await checkChain("/api/cargo", cargoRes.json, "scheduled", "delivered", "Cargo", 5);
+  await checkChain("/api/passengers", paxRes.json, "booked", "disembarked", "Passenger", 5);
 }
 
 async function testJournal(token) {
@@ -230,6 +272,7 @@ async function main() {
   } else {
     await testDataEndpoints(adminToken);
     await testJournal(adminToken);
+    await testTransit(adminToken);
     await testPersonas();
   }
 

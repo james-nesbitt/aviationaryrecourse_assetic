@@ -12,15 +12,14 @@ from pathlib import Path
 from . import reference
 from .generators import (
     generate_cargo,
-    generate_cargo_journey_events,
     generate_carrier_customers,
     generate_facilities,
     generate_operators,
     generate_orders,
     generate_ownership_history,
-    generate_passenger_boarding_events,
     generate_passengers,
     generate_routes,
+    generate_transit_events,
     generate_staff,
     generate_vehicles,
 )
@@ -89,8 +88,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     routes = generate_routes(rng, ids, vehicles, operators, airports, models, cargo, counts["routes"], anchor)
     orders = generate_orders(rng, ids, pools, customers, routes, staff, None, airports, models, counts["orders"], anchor, args.window_days)
     passengers = generate_passengers(rng, ids, pools, orders, operators, airports, counts["passengers"], anchor, args.window_days)
-    cargo_journey_events = generate_cargo_journey_events(rng, ids, cargo, facilities, vehicles, staff, airports, anchor, args.window_days)
-    passenger_boarding_events = generate_passenger_boarding_events(rng, ids, passengers, vehicles, staff, anchor, args.window_days)
+    transit_events = generate_transit_events(rng, ids, cargo, passengers, facilities, vehicles, staff, airports, anchor, args.window_days)
 
     files = [
         ("operators.jsonl", operators),
@@ -103,8 +101,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
         ("routes.jsonl", routes),
         ("orders.jsonl", orders),
         ("passengers.jsonl", passengers),
-        ("cargo_journey_events.jsonl", cargo_journey_events),
-        ("passenger_boarding_events.jsonl", passenger_boarding_events),
+        ("transit_events.jsonl", transit_events),
         ("airports.jsonl", airports),
         ("aircraft_models.jsonl", models),
     ]

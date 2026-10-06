@@ -20,8 +20,7 @@ only** — this tool is the sanctioned source of that data.
 | `carrier_customers.jsonl` | customers: cargo shippers and charter passenger-group clients, each with a responsible account manager |
 | `cargo.jsonl` | shipments with origin/destination and assigned vehicle |
 | `passengers.jsonl` | passengers carried on charter and scheduled passenger flights |
-| `cargo_journey_events.jsonl` | per-shipment location-tracking event chains (pickup → delivered) |
-| `passenger_boarding_events.jsonl` | per-passenger boarding/location event chains (check-in → disembarked) |
+| `transit_events.jsonl` | unified per-subject state-transition event chains (transit_event log) |
 | `airports.jsonl` | the resolved airport reference set actually used |
 | `aircraft_models.jsonl` | the aircraft models actually referenced |
 
@@ -66,45 +65,55 @@ passengers per order (linked via `order_id`); regular passenger operators
 additionally get 5–15 standalone passengers with `order_id: null`,
 representing scheduled-service bookings. `passenger_type` is weighted
 adult/child/infant (80/15/5) and `status` is weighted
-checked_in/boarded/in_transit/arrived/disembarked (15/25/25/25/10).
+booked/checked_in/boarded/in_transit/arrived/disembarked (10/15/20/20/25/10).
 
-### Cargo journey event semantics
+### Transit event semantics
 
-Each cargo shipment emits a strictly-increasing chain of location-tracking
-events (`cargo_journey_events.jsonl`), starting with `pickup` at the origin
-airport. The chain depth reflects the shipment `status`:
+`transit_events.jsonl` is the unified state-transition log for both cargo
+shipments and passengers. Each event records an `event_type` verb and the
+transition it performs (`from_state` → `to_state`); every transition must
+exist in the DB's `transit_transition` lookup table. The chain depth is
+driven by the entity's `status` in `cargo.jsonl`/`passengers.jsonl`, which is
+the expected terminal state (**test oracle**, not a stored column):
 
-| status | chain |
-| `scheduled` | `pickup` (at origin) |
-| `loaded` | `pickup` → `loaded` (origin, with vehicle) |
-| `in_transit` | `pickup` → `loaded` → `departed` (+ optional `arrived` at an intermediate airport) |
-| `delivered` | `pickup` → `loaded` → `departed` → (optional `arrived`) → (optional `warehouse_hold` at a warehouse facility, optionally followed by `transferred`) → `delivered` (at destination) |
+#### cargo states
 
-`warehouse_hold` events reference a warehouse facility at the arrival airport
-when one exists; `loaded`/`departed`/`arrived` events reference the carrying
-aircraft vehicle; `actor_id` is a ground-crew staff member at the fulfilling
-operator (null when that operator has no ground crew). `sequence` is
-per-cargo 1..n and `valid_time` is a strictly increasing datetime along the
-chain.
+scheduled, picked_up, loaded, in_transit, arrived, held, delivered
 
-### Passenger boarding event semantics
+| event_type | from_state | to_state |
+|---|---|---|
+| `pickup` | `scheduled` | `picked_up` |
+| `load` | `picked_up` | `loaded` |
+| `load` | `arrived` | `loaded` |
+| `load` | `held` | `loaded` |
+| `depart` | `loaded` | `in_transit` |
+| `arrive` | `in_transit` | `arrived` |
+| `hold` | `arrived` | `held` |
+| `deliver` | `arrived` | `delivered` |
 
-Each passenger emits a strictly-increasing chain of boarding/location events
-(`passenger_boarding_events.jsonl`), starting with `checked_in` at the origin
-airport. The chain depth reflects the passenger `status`:
+#### passenger states
 
-| status | chain |
-| `checked_in` | `checked_in` (origin) |
-| `boarded` | `checked_in` → `boarded` (origin, with vehicle) |
-| `in_transit` | `checked_in` → `boarded` → `departed` |
-| `arrived` | `checked_in` → `boarded` → `departed` → `arrived` (destination) |
-| `disembarked` | `checked_in` → `boarded` → `departed` → `arrived` → `disembarked` (destination) |
+booked, checked_in, boarded, in_transit, arrived, disembarked
 
-`boarded`/`departed`/`arrived` events reference the carrying aircraft vehicle;
-`actor_id` is a flight-crew member for boarding/departure/arrival/disembarking
-and a ground-crew member for check-in (null when the carrying operator has no
-such staff). `sequence` is per-passenger 1..n and `valid_time` is a strictly
-increasing datetime along the chain.
+| event_type | from_state | to_state |
+|---|---|---|
+| `check_in` | `booked` | `checked_in` |
+| `board` | `checked_in` | `boarded` |
+| `depart` | `boarded` | `in_transit` |
+| `arrive` | `in_transit` | `arrived` |
+| `disembark` | `arrived` | `disembarked` |
+
+Cargo chains start at `pickup` (origin) and may pass through an intermediate
+airport (preferably one with a warehouse, enabling `hold` at a facility).
+Passenger chains start at `check_in` (origin) and run directly to the
+destination; passengers with oracle status `booked` emit no events. `load`,
+`board`, `depart`, `arrive`, and `deliver` events reference the carrying
+aircraft vehicle; `hold` references a warehouse facility; `actor_id` is a
+ground-crew member for pickup/load/hold/deliver/check_in and a flight-crew
+member for board/depart/arrive/disembark (null when the operator has no such
+staff). `sequence` is per-subject 1..n and `valid_time` is a strictly
+increasing datetime along the chain. Chain continuity (event N `from_state`
+== event N-1 `to_state`) is asserted during generation.
 
 ## Usage
 

@@ -12,8 +12,6 @@ const navItems = [
   { to: "/staff", label: "Staff" },
   { to: "/customers", label: "Customers" },
   { to: "/passengers", label: "Passengers" },
-  { to: "/cargo-locations", label: "Cargo Locations" },
-  { to: "/passenger-locations", label: "Pax Locations" },
 ];
 
 export function AppLayout(): React.ReactElement {

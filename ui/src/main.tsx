@@ -12,8 +12,6 @@ import { RoutesView } from "./views/RoutesView.js";
 import { StaffView } from "./views/StaffView.js";
 import { CustomersView } from "./views/CustomersView.js";
 import { PassengersView } from "./views/PassengersView.js";
-import { CargoLocationsView } from "./views/CargoLocationsView.js";
-import { PassengerLocationsView } from "./views/PassengerLocationsView.js";
 import { DashboardView } from "./views/DashboardView.js";
 import { isLoggedIn } from "./lib/auth.js";
 
@@ -45,8 +43,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="staff" element={<StaffView />} />
           <Route path="customers" element={<CustomersView />} />
           <Route path="passengers" element={<PassengersView />} />
-          <Route path="cargo-locations" element={<CargoLocationsView />} />
-          <Route path="passenger-locations" element={<PassengerLocationsView />} />
         </Route>
       </Routes>
     </BrowserRouter>

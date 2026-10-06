@@ -1,9 +1,12 @@
--- Location tracking: passenger, cargo journey events, passenger boarding events
--- and current_location projection view.
--- Journal is source of truth; current_location is derived from the latest event.
+-- Transit event log: unified state-transition tracking for cargo and passengers.
+-- transit_event records typed state transitions (from_state -> to_state, named by
+-- an event_type verb) for both subjects. Allowed transitions live in the
+-- transit_transition lookup table and are enforced by a composite foreign key.
+-- Entity state is a projection: cargo_state / passenger_state views expose the
+-- latest to_state. The hash-chained journal_entry remains the audit layer.
 
 -- ============================================================================
--- Passenger
+-- Passenger (status column removed; state is derived from transit_event)
 -- ============================================================================
 
 CREATE TABLE passenger (
@@ -15,107 +18,122 @@ CREATE TABLE passenger (
     operator_id      TEXT NOT NULL REFERENCES operator (operator_id),
     origin_iata      CHAR(3) NOT NULL REFERENCES airport (iata),
     destination_iata CHAR(3) NOT NULL REFERENCES airport (iata),
-    status           TEXT NOT NULL CHECK (status IN ('checked_in', 'boarded', 'in_transit', 'arrived', 'disembarked')),
     valid_time       DATE NOT NULL,
     schema_version   INTEGER NOT NULL DEFAULT 1,
     generated_at     DATE NOT NULL
 );
 CREATE INDEX idx_passenger_operator ON passenger (operator_id);
 CREATE INDEX idx_passenger_order ON passenger (order_id);
-CREATE INDEX idx_passenger_status ON passenger (status);
 
 -- ============================================================================
--- Cargo journey events (location tracking for cargo)
+-- Cargo: drop status (defined in 001 with CHECK and idx_cargo_status, which
+-- the DROP takes with it; 001 stays untouched)
 -- ============================================================================
 
-CREATE TABLE cargo_journey_event (
+ALTER TABLE cargo DROP COLUMN status;
+
+-- ============================================================================
+-- Transit transition lookup (the state machine)
+-- ============================================================================
+
+CREATE TABLE transit_transition (
+    subject_type TEXT NOT NULL CHECK (subject_type IN ('cargo', 'passenger')),
+    event_type   TEXT NOT NULL,
+    from_state   TEXT NOT NULL,
+    to_state     TEXT NOT NULL,
+    PRIMARY KEY (subject_type, event_type, from_state, to_state)
+);
+
+INSERT INTO transit_transition (subject_type, event_type, from_state, to_state) VALUES
+    -- cargo
+    ('cargo', 'pickup',   'scheduled', 'picked_up'),
+    ('cargo', 'load',     'picked_up', 'loaded'),
+    ('cargo', 'load',     'arrived',   'loaded'),
+    ('cargo', 'load',     'held',      'loaded'),
+    ('cargo', 'depart',   'loaded',    'in_transit'),
+    ('cargo', 'arrive',   'in_transit', 'arrived'),
+    ('cargo', 'hold',     'arrived',  'held'),
+    ('cargo', 'deliver',  'arrived',  'delivered'),
+    -- passenger
+    ('passenger', 'check_in',   'booked',     'checked_in'),
+    ('passenger', 'board',      'checked_in', 'boarded'),
+    ('passenger', 'depart',     'boarded',    'in_transit'),
+    ('passenger', 'arrive',     'in_transit', 'arrived'),
+    ('passenger', 'disembark',  'arrived',    'disembarked');
+
+-- ============================================================================
+-- Transit event log
+-- ============================================================================
+
+CREATE TABLE transit_event (
     event_id       TEXT PRIMARY KEY,
-    cargo_id       TEXT NOT NULL REFERENCES cargo (cargo_id),
-    event_type     TEXT NOT NULL CHECK (event_type IN (
-        'pickup', 'loaded', 'departed', 'arrived', 'warehouse_hold', 'transferred', 'delivered'
-    )),
+    subject_type   TEXT NOT NULL CHECK (subject_type IN ('cargo', 'passenger')),
+    cargo_id       TEXT REFERENCES cargo (cargo_id),
+    passenger_id   TEXT REFERENCES passenger (passenger_id),
+    sequence       INTEGER NOT NULL CHECK (sequence >= 1),
+    event_type     TEXT NOT NULL,
+    from_state     TEXT NOT NULL,
+    to_state       TEXT NOT NULL,
     location_iata  CHAR(3) NOT NULL REFERENCES airport (iata),
+    vehicle_id     TEXT REFERENCES vehicle (vehicle_id),
     facility_id    TEXT REFERENCES facility (facility_id),
-    vehicle_id     TEXT REFERENCES vehicle (vehicle_id),
-    sequence       INTEGER NOT NULL,
+    actor_id       TEXT REFERENCES staff (staff_id),
     valid_time     TIMESTAMPTZ NOT NULL,
-    actor_id       TEXT NOT NULL REFERENCES staff (staff_id),
     schema_version INTEGER NOT NULL DEFAULT 1,
     generated_at   DATE NOT NULL,
-    UNIQUE (cargo_id, sequence)
+    CHECK ((subject_type = 'cargo'     AND cargo_id IS NOT NULL AND passenger_id IS NULL)
+        OR (subject_type = 'passenger' AND passenger_id IS NOT NULL AND cargo_id IS NULL)),
+    FOREIGN KEY (subject_type, event_type, from_state, to_state)
+        REFERENCES transit_transition (subject_type, event_type, from_state, to_state)
 );
-CREATE INDEX idx_cje_cargo ON cargo_journey_event (cargo_id, sequence);
-CREATE INDEX idx_cje_type ON cargo_journey_event (event_type);
-CREATE INDEX idx_cje_location ON cargo_journey_event (location_iata);
+CREATE UNIQUE INDEX uq_transit_event_cargo_seq     ON transit_event (cargo_id, sequence) WHERE cargo_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_transit_event_passenger_seq ON transit_event (passenger_id, sequence) WHERE passenger_id IS NOT NULL;
+CREATE INDEX idx_transit_event_cargo     ON transit_event (cargo_id, sequence DESC);
+CREATE INDEX idx_transit_event_passenger ON transit_event (passenger_id, sequence DESC);
+CREATE INDEX idx_transit_event_location  ON transit_event (location_iata);
+CREATE INDEX idx_transit_event_type      ON transit_event (event_type);
 
 -- ============================================================================
--- Passenger boarding events (location tracking for passengers)
+-- State projection views
 -- ============================================================================
 
-CREATE TABLE passenger_boarding_event (
-    event_id       TEXT PRIMARY KEY,
-    passenger_id   TEXT NOT NULL REFERENCES passenger (passenger_id),
-    event_type     TEXT NOT NULL CHECK (event_type IN (
-        'checked_in', 'boarded', 'departed', 'arrived', 'disembarked'
-    )),
-    location_iata  CHAR(3) NOT NULL REFERENCES airport (iata),
-    vehicle_id     TEXT REFERENCES vehicle (vehicle_id),
-    sequence       INTEGER NOT NULL,
-    valid_time     TIMESTAMPTZ NOT NULL,
-    actor_id       TEXT NOT NULL REFERENCES staff (staff_id),
-    schema_version INTEGER NOT NULL DEFAULT 1,
-    generated_at   DATE NOT NULL,
-    UNIQUE (passenger_id, sequence)
-);
-CREATE INDEX idx_pbe_passenger ON passenger_boarding_event (passenger_id, sequence);
-CREATE INDEX idx_pbe_type ON passenger_boarding_event (event_type);
-CREATE INDEX idx_pbe_location ON passenger_boarding_event (location_iata);
-
--- ============================================================================
--- Current location projection (derived from latest journey/boarding event)
--- ============================================================================
-
--- Cargo current location: the location_iata of the most recent cargo_journey_event
-CREATE VIEW cargo_current_location AS
+CREATE VIEW cargo_state AS
 SELECT DISTINCT ON (c.cargo_id)
-    c.cargo_id,
-    c.customer_id,
-    c.operator_id,
-    c.origin_iata,
-    c.destination_iata,
-    c.status AS cargo_status,
-    cje.event_type AS last_event_type,
-    cje.location_iata AS current_location_iata,
-    cje.facility_id AS current_facility_id,
-    cje.vehicle_id AS current_vehicle_id,
-    cje.valid_time AS last_event_time,
-    cje.sequence AS last_sequence
+    c.cargo_id, c.customer_id, cc.company_name AS customer_name,
+    c.operator_id, o.name AS operator_name,
+    c.origin_iata, c.destination_iata, c.assigned_vehicle_id,
+    c.weight_kg, c.cargo_type, c.valid_time, c.schema_version, c.generated_at,
+    COALESCE(te.to_state, 'scheduled') AS state,
+    te.event_type AS last_event_type,
+    te.location_iata AS current_location_iata,
+    te.facility_id AS current_facility_id,
+    te.vehicle_id AS current_vehicle_id,
+    te.valid_time AS last_event_time,
+    te.sequence AS last_sequence
 FROM cargo c
-LEFT JOIN cargo_journey_event cje ON cje.cargo_id = c.cargo_id
-ORDER BY c.cargo_id, cje.sequence DESC;
+JOIN carrier_customer cc ON cc.customer_id = c.customer_id
+JOIN operator o ON o.operator_id = c.operator_id
+LEFT JOIN transit_event te ON te.cargo_id = c.cargo_id
+ORDER BY c.cargo_id, te.sequence DESC NULLS LAST;
 
--- Passenger current location: the location_iata of the most recent boarding event
-CREATE VIEW passenger_current_location AS
+CREATE VIEW passenger_state AS
 SELECT DISTINCT ON (p.passenger_id)
-    p.passenger_id,
-    p.given_name,
-    p.family_name,
-    p.passenger_type,
-    p.operator_id,
-    p.origin_iata,
-    p.destination_iata,
-    p.status AS passenger_status,
-    pbe.event_type AS last_event_type,
-    pbe.location_iata AS current_location_iata,
-    pbe.vehicle_id AS current_vehicle_id,
-    pbe.valid_time AS last_event_time,
-    pbe.sequence AS last_sequence
+    p.passenger_id, p.given_name, p.family_name, p.passenger_type, p.order_id,
+    p.operator_id, o.name AS operator_name,
+    p.origin_iata, p.destination_iata, p.valid_time, p.schema_version, p.generated_at,
+    COALESCE(te.to_state, 'booked') AS state,
+    te.event_type AS last_event_type,
+    te.location_iata AS current_location_iata,
+    te.vehicle_id AS current_vehicle_id,
+    te.valid_time AS last_event_time,
+    te.sequence AS last_sequence
 FROM passenger p
-LEFT JOIN passenger_boarding_event pbe ON pbe.passenger_id = p.passenger_id
-ORDER BY p.passenger_id, pbe.sequence DESC;
+JOIN operator o ON o.operator_id = p.operator_id
+LEFT JOIN transit_event te ON te.passenger_id = p.passenger_id
+ORDER BY p.passenger_id, te.sequence DESC NULLS LAST;
 
 -- ============================================================================
 -- Grants
 -- ============================================================================
-GRANT SELECT, INSERT, UPDATE, DELETE ON passenger, cargo_journey_event, passenger_boarding_event TO assetic_app;
-GRANT SELECT ON cargo_current_location, passenger_current_location TO assetic_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON passenger, transit_event TO assetic_app;
+GRANT SELECT ON transit_transition, cargo_state, passenger_state TO assetic_app;

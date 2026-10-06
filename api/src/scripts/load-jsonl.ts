@@ -184,7 +184,6 @@ async function loadAll(dir: string): Promise<void> {
       assignedVehicleId: (r.assigned_vehicle_id as string) ?? null,
       weightKg: r.weight_kg as number,
       cargoType: r.cargo_type as string,
-      status: r.status as string,
       validTime: toDate(r.valid_time),
       schemaVersion: r.schema_version as number,
       generatedAt: toDate(r.generated_at),
@@ -246,7 +245,6 @@ async function loadAll(dir: string): Promise<void> {
         operatorId: r.operator_id as string,
         originIata: r.origin_iata as string,
         destinationIata: r.destination_iata as string,
-        status: r.status as string,
         validTime: toDate(r.valid_time),
         schemaVersion: r.schema_version as number,
         generatedAt: toDate(r.generated_at),
@@ -254,43 +252,26 @@ async function loadAll(dir: string): Promise<void> {
     });
   }
 
-  // ── Cargo journey events ───────────────────────────────────────────────
-  const cjeFile = await readFile(join(dir, "cargo_journey_events.jsonl"), "utf-8").catch(() => "");
-  const cjeRecords = cjeFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
-  if (cjeRecords.length > 0) {
-    console.log(`  cargo_journey_events: ${cjeRecords.length}`);
-    await prisma.cargoJourneyEvent.createMany({
-      data: cjeRecords.map((r) => ({
+  // ── Transit events (unified state-transition log) ─────────────────────
+  const tevFile = await readFile(join(dir, "transit_events.jsonl"), "utf-8").catch(() => "");
+  const tevRecords = tevFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
+  if (tevRecords.length > 0) {
+    console.log(`  transit_events: ${tevRecords.length}`);
+    await prisma.transitEvent.createMany({
+      data: tevRecords.map((r) => ({
         eventId: r.event_id as string,
-        cargoId: r.cargo_id as string,
+        subjectType: r.subject_type as string,
+        cargoId: (r.cargo_id as string) ?? null,
+        passengerId: (r.passenger_id as string) ?? null,
+        sequence: r.sequence as number,
         eventType: r.event_type as string,
+        fromState: r.from_state as string,
+        toState: r.to_state as string,
         locationIata: r.location_iata as string,
+        vehicleId: (r.vehicle_id as string) ?? null,
         facilityId: (r.facility_id as string) ?? null,
-        vehicleId: (r.vehicle_id as string) ?? null,
-        sequence: r.sequence as number,
+        actorId: (r.actor_id as string) ?? null,
         validTime: new Date(r.valid_time as string),
-        actorId: r.actor_id as string,
-        schemaVersion: r.schema_version as number,
-        generatedAt: toDate(r.generated_at),
-      })),
-    });
-  }
-
-  // ── Passenger boarding events ──────────────────────────────────────────
-  const pbeFile = await readFile(join(dir, "passenger_boarding_events.jsonl"), "utf-8").catch(() => "");
-  const pbeRecords = pbeFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
-  if (pbeRecords.length > 0) {
-    console.log(`  passenger_boarding_events: ${pbeRecords.length}`);
-    await prisma.passengerBoardingEvent.createMany({
-      data: pbeRecords.map((r) => ({
-        eventId: r.event_id as string,
-        passengerId: r.passenger_id as string,
-        eventType: r.event_type as string,
-        locationIata: r.location_iata as string,
-        vehicleId: (r.vehicle_id as string) ?? null,
-        sequence: r.sequence as number,
-        validTime: new Date(r.valid_time as string),
-        actorId: r.actor_id as string,
         schemaVersion: r.schema_version as number,
         generatedAt: toDate(r.generated_at),
       })),
