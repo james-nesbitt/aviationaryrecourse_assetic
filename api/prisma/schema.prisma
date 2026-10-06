@@ -161,9 +161,9 @@ model Cargo {
   originIata        String   @map("origin_iata") @db.Char(3)
   destinationIata   String   @map("destination_iata") @db.Char(3)
   assignedVehicleId String?  @map("assigned_vehicle_id")
+  operationId       String?  @map("operation_id")
   weightKg          Int      @map("weight_kg")
   cargoType         String   @map("cargo_type")
-  status            String
   validTime         DateTime @map("valid_time") @db.Date
   schemaVersion     Int      @default(1) @map("schema_version")
   generatedAt       DateTime @map("generated_at") @db.Date
@@ -173,7 +173,6 @@ model Cargo {
 
   @@index([customerId])
   @@index([operatorId])
-  @@index([status])
   @@map("cargo")
 }
 
@@ -183,6 +182,8 @@ model Route {
   vehicleId     String   @map("vehicle_id")
   routeType     String   @map("route_type")
   baseIata      String   @map("base_iata") @db.Char(3)
+  frequencyDays Int      @map("frequency_days")
+  firstOperatingDate DateTime @map("first_operating_date") @db.Date
   legs          Json
   schemaVersion Int      @default(1) @map("schema_version")
   generatedAt   DateTime @map("generated_at") @db.Date
@@ -224,4 +225,92 @@ model AsseticOrder {
 // Journal is managed via raw SQL (see db/migrations/001_initial_schema.sql).
 // Prisma does not manage this table's schema; we use $queryRaw for appends.
 // model JournalEntry is intentionally omitted from Prisma to keep the
-// append-only/hash-chain constraints in raw SQL.
+
+model Passenger {
+  passengerId     String   @id @map("passenger_id")
+  givenName       String   @map("given_name")
+  familyName      String   @map("family_name")
+  passengerType   String   @map("passenger_type")
+  orderId         String?  @map("order_id")
+  operationId     String?  @map("operation_id")
+  operatorId      String   @map("operator_id")
+  originIata      String   @map("origin_iata") @db.Char(3)
+  destinationIata String   @map("destination_iata") @db.Char(3)
+  validTime       DateTime @map("valid_time") @db.Date
+  schemaVersion   Int      @default(1) @map("schema_version")
+  generatedAt     DateTime @map("generated_at") @db.Date
+
+  @@index([operatorId])
+  @@index([orderId])
+  @@map("passenger")
+}
+
+model VehicleMaintenance {
+  maintenanceId   String   @id @map("maintenance_id")
+  vehicleId       String   @map("vehicle_id")
+  facilityId      String?  @map("facility_id")
+  maintenanceType String   @map("maintenance_type")
+  startDate       DateTime @map("start_date") @db.Date
+  endDate         DateTime @map("end_date") @db.Date
+  status          String
+  schemaVersion   Int      @default(1) @map("schema_version")
+  generatedAt     DateTime @map("generated_at") @db.Date
+
+  @@index([vehicleId, startDate])
+  @@map("vehicle_maintenance")
+}
+
+model RouteAssignment {
+  assignmentId       String    @id @map("assignment_id")
+  routeId            String    @map("route_id")
+  vehicleId          String    @map("vehicle_id")
+  validFrom          DateTime  @map("valid_from") @db.Date
+  validTo            DateTime? @map("valid_to") @db.Date
+  reason             String
+  replacesVehicleId  String?   @map("replaces_vehicle_id")
+  schemaVersion      Int       @default(1) @map("schema_version")
+  generatedAt        DateTime  @map("generated_at") @db.Date
+
+  @@index([routeId, validFrom])
+  @@index([vehicleId, validFrom])
+  @@map("route_assignment")
+}
+
+model RouteOperation {
+  operationId    String   @id @map("operation_id")
+  routeId        String   @map("route_id")
+  vehicleId      String   @map("vehicle_id")
+  operatorId     String   @map("operator_id")
+  operatingDate  DateTime @map("operating_date") @db.Date
+  status         String
+  legs           Json
+  schemaVersion  Int      @default(1) @map("schema_version")
+  generatedAt   DateTime @map("generated_at") @db.Date
+
+  @@unique([routeId, operatingDate])
+  @@index([vehicleId, operatingDate])
+  @@index([operatorId, operatingDate])
+  @@map("route_operation")
+}
+
+model TransitEvent {
+  eventId       String   @id @map("event_id")
+  subjectType   String   @map("subject_type")
+  cargoId       String?  @map("cargo_id")
+  passengerId   String?  @map("passenger_id")
+  sequence      Int
+  eventType     String   @map("event_type")
+  fromState     String   @map("from_state")
+  toState       String   @map("to_state")
+  locationIata  String   @map("location_iata") @db.Char(3)
+  vehicleId     String?  @map("vehicle_id")
+  facilityId    String?  @map("facility_id")
+  actorId       String?  @map("actor_id")
+  validTime     DateTime @map("valid_time")
+  schemaVersion Int      @default(1) @map("schema_version")
+  generatedAt   DateTime @map("generated_at") @db.Date
+
+  @@index([cargoId, sequence])
+  @@index([passengerId, sequence])
+  @@map("transit_event")
+}

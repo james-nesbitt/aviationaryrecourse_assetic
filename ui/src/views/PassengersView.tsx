@@ -1,22 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { apiFetch } from "../lib/auth.js";
 
-/** Row shape from the cargo_state projection view. */
-interface CargoStateRow {
-  cargo_id: string;
-  customer_id: string;
-  customer_name: string;
+/** Row shape from the passenger_state projection view. */
+interface PassengerStateRow {
+  passenger_id: string;
+  given_name: string;
+  family_name: string;
+  passenger_type: string;
+  order_id: string | null;
   operator_id: string;
   operator_name: string;
   origin_iata: string;
   destination_iata: string;
-  assigned_vehicle_id: string | null;
-  weight_kg: number;
-  cargo_type: string;
   state: string;
   last_event_type: string | null;
   current_location_iata: string | null;
-  current_facility_id: string | null;
   current_vehicle_id: string | null;
   last_event_time: string | null;
   last_sequence: number | null;
@@ -35,8 +33,8 @@ interface TransitEvent {
   valid_time: string;
 }
 
-export function CargoView(): React.ReactElement {
-  const [cargo, setCargo] = useState<CargoStateRow[]>([]);
+export function PassengersView(): React.ReactElement {
+  const [passengers, setPassengers] = useState<PassengerStateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState("");
@@ -45,22 +43,22 @@ export function CargoView(): React.ReactElement {
 
   useEffect(() => {
     setLoading(true);
-    apiFetch(`/api/cargo${stateFilter ? `?state=${stateFilter}` : ""}`)
+    apiFetch(`/api/passengers${stateFilter ? `?state=${stateFilter}` : ""}`)
       .then((r) => r.json())
-      .then(setCargo)
+      .then(setPassengers)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, [stateFilter]);
 
-  async function toggleExpand(cargoId: string): Promise<void> {
-    if (expanded === cargoId) {
+  async function toggleExpand(passengerId: string): Promise<void> {
+    if (expanded === passengerId) {
       setExpanded(null);
       return;
     }
-    setExpanded(cargoId);
-    if (!eventsById[cargoId]) {
-      const events = await apiFetch(`/api/cargo/${cargoId}/events`).then((r) => r.json());
-      setEventsById((prev) => ({ ...prev, [cargoId]: events }));
+    setExpanded(passengerId);
+    if (!eventsById[passengerId]) {
+      const events = await apiFetch(`/api/passengers/${passengerId}/events`).then((r) => r.json());
+      setEventsById((prev) => ({ ...prev, [passengerId]: events }));
     }
   }
 
@@ -69,9 +67,9 @@ export function CargoView(): React.ReactElement {
 
   return (
     <div>
-      <h1 style={{ marginTop: 0 }}>Cargo ({cargo.length})</h1>
+      <h1 style={{ marginTop: 0 }}>Passengers ({passengers.length})</h1>
       <div style={{ marginBottom: 16 }}>
-        {["", "picked_up", "loaded", "in_transit", "arrived", "held", "delivered"].map((s) => (
+        {["", "booked", "checked_in", "boarded", "in_transit", "arrived", "disembarked"].map((s) => (
           <button
             key={s}
             onClick={() => setStateFilter(s)}
@@ -92,36 +90,36 @@ export function CargoView(): React.ReactElement {
         <thead>
           <tr style={{ background: "#1a1a2e", color: "#eee", textAlign: "left" }}>
             <th style={th}>ID</th>
-            <th style={th}>Customer</th>
+            <th style={th}>Name</th>
+            <th style={th}>Type</th>
             <th style={th}>Operator</th>
             <th style={th}>Route</th>
             <th style={th}>State</th>
             <th style={th}>Location</th>
             <th style={th}>Last event</th>
-            <th style={th}>Weight</th>
-            <th style={th}>Type</th>
+            <th style={th}>Order</th>
             <th style={th}>Details</th>
           </tr>
         </thead>
         <tbody>
-          {cargo.map((c) => (
-            <React.Fragment key={c.cargo_id}>
+          {passengers.map((p) => (
+            <React.Fragment key={p.passenger_id}>
               <tr
                 style={{ borderBottom: "1px solid #eee", cursor: "pointer" }}
-                onClick={() => void toggleExpand(c.cargo_id)}
+                onClick={() => void toggleExpand(p.passenger_id)}
               >
-                <td style={td}>{c.cargo_id}</td>
-                <td style={td}>{c.customer_name}</td>
-                <td style={td}>{c.operator_name}</td>
-                <td style={td}>{c.origin_iata} → {c.destination_iata}</td>
-                <td style={td}>{c.state}</td>
-                <td style={td}>{c.current_location_iata ?? "—"}</td>
-                <td style={td}>{c.last_event_type ?? "—"}</td>
-                <td style={td}>{c.weight_kg.toLocaleString()} kg</td>
-                <td style={td}>{c.cargo_type}</td>
-                <td style={td}>{expanded === c.cargo_id ? "▲" : "▼"}</td>
+                <td style={td}>{p.passenger_id}</td>
+                <td style={td}>{p.given_name} {p.family_name}</td>
+                <td style={td}>{p.passenger_type}</td>
+                <td style={td}>{p.operator_name}</td>
+                <td style={td}>{p.origin_iata} → {p.destination_iata}</td>
+                <td style={td}>{p.state}</td>
+                <td style={td}>{p.current_location_iata ?? "—"}</td>
+                <td style={td}>{p.last_event_type ?? "—"}</td>
+                <td style={td}>{p.order_id ?? "—"}</td>
+                <td style={td}>{expanded === p.passenger_id ? "▲" : "▼"}</td>
               </tr>
-              {expanded === c.cargo_id && (
+              {expanded === p.passenger_id && (
                 <tr onClick={(e) => e.stopPropagation()}>
                   <td colSpan={10} style={{ padding: 16, background: "#f9f9f9" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%" }}>
@@ -138,7 +136,7 @@ export function CargoView(): React.ReactElement {
                         </tr>
                       </thead>
                       <tbody>
-                        {(eventsById[c.cargo_id] ?? []).map((e) => (
+                        {(eventsById[p.passenger_id] ?? []).map((e) => (
                           <tr key={e.event_id}>
                             <td style={subTd}>{e.sequence}</td>
                             <td style={subTd}>{e.event_type}</td>

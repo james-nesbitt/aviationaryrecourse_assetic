@@ -4,9 +4,11 @@
 export {};
 
 const user = process.env.PGUSER ?? "postgres";
+const pass = process.env.PGPASSWORD;
 const host = process.env.PGHOST ?? "localhost";
 const port = process.env.PGPORT ?? "5432";
 const db = process.env.PGDATABASE ?? "assetic";
-process.env.DATABASE_URL = `postgresql://**REDACTED**@${host}:${port}/${db}`;
+const auth = pass ? user + ":" + pass : user;
+process.env.DATABASE_URL = "postgresql://" + auth + "@" + host + ":" + port + "/" + db;
 
 await import("./load-jsonl.js");

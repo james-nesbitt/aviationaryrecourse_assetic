@@ -13,7 +13,6 @@ interface Route {
     to_iata: string;
     scheduled_departure: string;
     scheduled_arrival: string;
-    cargo_ref?: string;
   }>;
   operator?: { name: string };
 }
@@ -42,10 +41,11 @@ export function RoutesView(): React.ReactElement {
         <thead>
           <tr style={{ background: "#1a1a2e", color: "#eee", textAlign: "left" }}>
             <th style={th}>ID</th>
+            <th style={th}>Itinerary</th>
             <th style={th}>Operator</th>
             <th style={th}>Vehicle</th>
             <th style={th}>Type</th>
-            <th style={th}>Base</th>
+            <th style={th}>Date</th>
             <th style={th}>Legs</th>
             <th style={th}>Details</th>
           </tr>
@@ -57,17 +57,18 @@ export function RoutesView(): React.ReactElement {
                 style={{ borderBottom: "1px solid #eee", cursor: "pointer" }}
                 onClick={() => setExpanded(expanded === r.route_id ? null : r.route_id)}
               >
-                <td style={td}>{r.route_id}</td>
+                <td style={{ ...td, fontFamily: "monospace", color: "#666" }}>{r.route_id}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{routeLabel(r)}</td>
                 <td style={td}>{r.operator?.name ?? r.operator_id}</td>
                 <td style={td}>{r.vehicle_id}</td>
                 <td style={td}>{r.route_type}</td>
-                <td style={td}>{r.base_iata}</td>
+                <td style={td}>{routeDate(r)}</td>
                 <td style={td}>{r.legs.length}</td>
                 <td style={td}>{expanded === r.route_id ? "▲" : "▼"}</td>
               </tr>
               {expanded === r.route_id && (
                 <tr onClick={(e) => e.stopPropagation()}>
-                  <td colSpan={7} style={{ padding: 16, background: "#f9f9f9" }}>
+                  <td colSpan={8} style={{ padding: 16, background: "#f9f9f9" }}>
                     <table style={{ borderCollapse: "collapse", width: "100%" }}>
                       <thead>
                         <tr style={{ textAlign: "left", color: "#666" }}>
@@ -76,7 +77,6 @@ export function RoutesView(): React.ReactElement {
                           <th style={subTh}>To</th>
                           <th style={subTh}>Departure</th>
                           <th style={subTh}>Arrival</th>
-                          <th style={subTh}>Cargo</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -87,7 +87,6 @@ export function RoutesView(): React.ReactElement {
                             <td style={subTd}>{leg.to_iata}</td>
                             <td style={subTd}>{leg.scheduled_departure}</td>
                             <td style={subTd}>{leg.scheduled_arrival}</td>
-                            <td style={subTd}>{leg.cargo_ref ?? "—"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -101,6 +100,23 @@ export function RoutesView(): React.ReactElement {
       </table>
     </div>
   );
+}
+
+/**
+ * Human-readable itinerary: the ordered stop sequence, e.g. "LAX → DEN → LAX".
+ * Collapses the leg list into the airport chain so the route is identifiable
+ * without expanding it.
+ */
+function routeLabel(r: Route): string {
+  if (r.legs.length === 0) return r.base_iata;
+  const stops = [r.legs[0].from_iata, ...r.legs.map((l) => l.to_iata)];
+  return stops.join(" → ");
+}
+
+/** Operating date, taken from the first leg's scheduled departure. */
+function routeDate(r: Route): string {
+  const first = r.legs[0]?.scheduled_departure;
+  return first ? first.split("T")[0] : "—";
 }
 
 const th: React.CSSProperties = { padding: "8px 12px", fontSize: "0.85rem" };

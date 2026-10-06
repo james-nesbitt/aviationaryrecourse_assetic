@@ -2,9 +2,11 @@
  * Load JSONL files from tools/datagen output into the assetic Postgres database.
  * Usage: tsx src/scripts/load-jsonl.ts [--dir /path/to/datagen-out]
  *
- * Reads the 11 JSONL files produced by assetic-datagen and inserts them
+ * Reads the JSONL files produced by assetic-datagen and inserts them
  * in dependency order: airports, aircraft_models, operators, vehicles,
- * ownership_history, staff, facilities, carrier_customers, cargo, routes, orders.
+ * ownership_history, staff, facilities, carrier_customers, routes,
+ * vehicle_maintenance, route_assignments, route_operations, cargo,
+ * orders, passengers, transit_events.
  */
 
 import { readFile, readdir } from "node:fs/promises";
@@ -171,6 +173,75 @@ async function loadAll(dir: string): Promise<void> {
     })),
   });
 
+  // ── Routes (recurring patterns) ────────────────────────────────────────
+  const routes = await readJsonl(join(dir, "routes.jsonl"));
+  console.log(`  routes: ${routes.length}`);
+  await prisma.route.createMany({
+    data: routes.map((r) => ({
+      routeId: r.route_id as string,
+      operatorId: r.operator_id as string,
+      vehicleId: r.vehicle_id as string,
+      routeType: r.route_type as string,
+      baseIata: r.base_iata as string,
+      frequencyDays: r.frequency_days as number,
+      firstOperatingDate: toDate(r.first_operating_date),
+      legs: r.legs ?? [],
+      schemaVersion: r.schema_version as number,
+      generatedAt: toDate(r.generated_at),
+    })),
+  });
+
+  // ── Vehicle maintenance ───────────────────────────────────────────────
+  const maintenance = await readJsonl(join(dir, "vehicle_maintenance.jsonl"));
+  console.log(`  vehicle_maintenance: ${maintenance.length}`);
+  await prisma.vehicleMaintenance.createMany({
+    data: maintenance.map((r) => ({
+      maintenanceId: r.maintenance_id as string,
+      vehicleId: r.vehicle_id as string,
+      facilityId: (r.facility_id as string) ?? null,
+      maintenanceType: r.maintenance_type as string,
+      startDate: toDate(r.start_date),
+      endDate: toDate(r.end_date),
+      status: r.status as string,
+      schemaVersion: r.schema_version as number,
+      generatedAt: toDate(r.generated_at),
+    })),
+  });
+
+  // ── Route assignments ─────────────────────────────────────────────────
+  const assignments = await readJsonl(join(dir, "route_assignments.jsonl"));
+  console.log(`  route_assignments: ${assignments.length}`);
+  await prisma.routeAssignment.createMany({
+    data: assignments.map((r) => ({
+      assignmentId: r.assignment_id as string,
+      routeId: r.route_id as string,
+      vehicleId: r.vehicle_id as string,
+      validFrom: toDate(r.valid_from),
+      validTo: r.valid_to ? toDate(r.valid_to) : null,
+      reason: r.reason as string,
+      replacesVehicleId: (r.replaces_vehicle_id as string) ?? null,
+      schemaVersion: r.schema_version as number,
+      generatedAt: toDate(r.generated_at),
+    })),
+  });
+
+  // ── Route operations ──────────────────────────────────────────────────
+  const operations = await readJsonl(join(dir, "route_operations.jsonl"));
+  console.log(`  route_operations: ${operations.length}`);
+  await prisma.routeOperation.createMany({
+    data: operations.map((r) => ({
+      operationId: r.operation_id as string,
+      routeId: r.route_id as string,
+      vehicleId: r.vehicle_id as string,
+      operatorId: r.operator_id as string,
+      operatingDate: toDate(r.operating_date),
+      status: r.status as string,
+      legs: r.legs ?? [],
+      schemaVersion: r.schema_version as number,
+      generatedAt: toDate(r.generated_at),
+    })),
+  });
+
   // ── Cargo ──────────────────────────────────────────────────────────────
   const cargo = await readJsonl(join(dir, "cargo.jsonl"));
   console.log(`  cargo: ${cargo.length}`);
@@ -182,26 +253,10 @@ async function loadAll(dir: string): Promise<void> {
       originIata: r.origin_iata as string,
       destinationIata: r.destination_iata as string,
       assignedVehicleId: (r.assigned_vehicle_id as string) ?? null,
+      operationId: (r.operation_id as string) ?? null,
       weightKg: r.weight_kg as number,
       cargoType: r.cargo_type as string,
-      status: r.status as string,
       validTime: toDate(r.valid_time),
-      schemaVersion: r.schema_version as number,
-      generatedAt: toDate(r.generated_at),
-    })),
-  });
-
-  // ── Routes ─────────────────────────────────────────────────────────────
-  const routes = await readJsonl(join(dir, "routes.jsonl"));
-  console.log(`  routes: ${routes.length}`);
-  await prisma.route.createMany({
-    data: routes.map((r) => ({
-      routeId: r.route_id as string,
-      operatorId: r.operator_id as string,
-      vehicleId: r.vehicle_id as string,
-      routeType: r.route_type as string,
-      baseIata: r.base_iata as string,
-      legs: r.legs ?? [],
       schemaVersion: r.schema_version as number,
       generatedAt: toDate(r.generated_at),
     })),
@@ -230,6 +285,55 @@ async function loadAll(dir: string): Promise<void> {
       generatedAt: toDate(r.generated_at),
     })),
   });
+
+  // ── Passengers ─────────────────────────────────────────────────────────
+  const passengersFile = await readFile(join(dir, "passengers.jsonl"), "utf-8").catch(() => "");
+  const passengers = passengersFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
+  if (passengers.length > 0) {
+    console.log(`  passengers: ${passengers.length}`);
+    await prisma.passenger.createMany({
+      data: passengers.map((r) => ({
+        passengerId: r.passenger_id as string,
+        givenName: r.given_name as string,
+        familyName: r.family_name as string,
+        passengerType: r.passenger_type as string,
+        orderId: (r.order_id as string) ?? null,
+        operationId: (r.operation_id as string) ?? null,
+        operatorId: r.operator_id as string,
+        originIata: r.origin_iata as string,
+        destinationIata: r.destination_iata as string,
+        validTime: toDate(r.valid_time),
+        schemaVersion: r.schema_version as number,
+        generatedAt: toDate(r.generated_at),
+      })),
+    });
+  }
+
+  // ── Transit events (unified state-transition log) ─────────────────────
+  const tevFile = await readFile(join(dir, "transit_events.jsonl"), "utf-8").catch(() => "");
+  const tevRecords = tevFile.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as JsonlRecord);
+  if (tevRecords.length > 0) {
+    console.log(`  transit_events: ${tevRecords.length}`);
+    await prisma.transitEvent.createMany({
+      data: tevRecords.map((r) => ({
+        eventId: r.event_id as string,
+        subjectType: r.subject_type as string,
+        cargoId: (r.cargo_id as string) ?? null,
+        passengerId: (r.passenger_id as string) ?? null,
+        sequence: r.sequence as number,
+        eventType: r.event_type as string,
+        fromState: r.from_state as string,
+        toState: r.to_state as string,
+        locationIata: r.location_iata as string,
+        vehicleId: (r.vehicle_id as string) ?? null,
+        facilityId: (r.facility_id as string) ?? null,
+        actorId: (r.actor_id as string) ?? null,
+        validTime: new Date(r.valid_time as string),
+        schemaVersion: r.schema_version as number,
+        generatedAt: toDate(r.generated_at),
+      })),
+    });
+  }
 
   console.log("Load complete.");
 }

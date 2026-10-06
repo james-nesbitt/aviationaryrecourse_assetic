@@ -21,6 +21,12 @@ vi.mock("../lib/prisma.js", () => ({
     airport: { findMany: vi.fn() },
     aircraftModel: { findMany: vi.fn() },
     facility: { findMany: vi.fn() },
+    passenger: { findUnique: vi.fn() },
+    transitEvent: { findMany: vi.fn() },
+    routeOperation: { findMany: vi.fn(), findUnique: vi.fn() },
+    routeAssignment: { findMany: vi.fn() },
+    vehicleMaintenance: { findMany: vi.fn() },
+    $queryRaw: vi.fn(async () => []),
   },
 }));
 
@@ -141,6 +147,18 @@ describe("Domain routes", () => {
     );
   });
 
+  it("GET /api/cargo/:id/events calls prisma.transitEvent.findMany ordered by sequence", async () => {
+    const mocked = vi.mocked(prisma.transitEvent.findMany);
+    mocked.mockResolvedValue([]);
+    const route = app.routes.get("GET /api/cargo/:id/events");
+    expect(route).toBeDefined();
+    await route!.handler({ user: mockUser, params: { id: "cgo-0001" } });
+    expect(mocked).toHaveBeenCalledWith({
+      where: { cargoId: "cgo-0001" },
+      orderBy: { sequence: "asc" },
+    });
+  });
+
   it("registers all expected read endpoints", () => {
     const expected = [
       "GET /api/operators",
@@ -149,13 +167,31 @@ describe("Domain routes", () => {
       "GET /api/customers",
       "GET /api/cargo",
       "GET /api/routes",
+      "GET /api/route-operations",
+      "GET /api/route-operations/:id",
+      "GET /api/route-assignments",
+      "GET /api/vehicle-maintenance",
       "GET /api/orders",
       "GET /api/airports",
       "GET /api/aircraft-models",
       "GET /api/facilities",
+      "GET /api/passengers",
+      "GET /api/passengers/:id",
+      "GET /api/cargo/:id/events",
+      "GET /api/passengers/:id/events",
+      "GET /api/transit/transitions",
     ];
     for (const path of expected) {
       expect(app.routes.has(path)).toBe(true);
     }
+  });
+
+  it("GET /api/route-operations passes vehicleId and status filters to prisma", async () => {
+    const route = app.routes.get("GET /api/route-operations");
+    if (!route) throw new Error("route not registered");
+    await route.handler({ query: { vehicleId: "veh-0001", status: "completed" } });
+    expect(prisma.routeOperation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { vehicleId: "veh-0001", status: "completed" } }),
+    );
   });
 });

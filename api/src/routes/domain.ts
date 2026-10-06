@@ -63,15 +63,13 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Cargo ──────────────────────────────────────────────────────────────
   app.get("/api/cargo", async (request) => {
-    const query = request.query as { status?: string; operatorId?: string };
-    const where: Record<string, unknown> = {};
-    if (query.status) where.status = query.status;
-    if (query.operatorId) where.operatorId = query.operatorId;
-    return prisma.cargo.findMany({
-      where,
-      include: { customer: true, operator: true },
-      orderBy: { cargoId: "asc" },
-    });
+    const query = request.query as { state?: string; operatorId?: string };
+    return prisma.$queryRaw`
+      SELECT * FROM cargo_state
+      WHERE (${query.state ?? null}::text IS NULL OR state = ${query.state ?? null})
+        AND (${query.operatorId ?? null}::text IS NULL OR operator_id = ${query.operatorId ?? null})
+      ORDER BY cargo_id ASC
+    `;
   });
 
   // ── Routes ─────────────────────────────────────────────────────────────
@@ -83,6 +81,48 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
       where,
       include: { operator: true },
       orderBy: { routeId: "asc" },
+    });
+  });
+
+  // ── Route operations (dated executions) ────────────────────────────────
+  app.get("/api/route-operations", async (request) => {
+    const query = request.query as { routeId?: string; vehicleId?: string; status?: string };
+    const where: Record<string, unknown> = {};
+    if (query.routeId) where.routeId = query.routeId;
+    if (query.vehicleId) where.vehicleId = query.vehicleId;
+    if (query.status) where.status = query.status;
+    return prisma.routeOperation.findMany({
+      where,
+      orderBy: [{ operatingDate: "asc" }, { routeId: "asc" }],
+    });
+  });
+
+  app.get("/api/route-operations/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.routeOperation.findUnique({ where: { operationId: id } });
+  });
+
+  // ── Route assignments ──────────────────────────────────────────────────
+  app.get("/api/route-assignments", async (request) => {
+    const query = request.query as { routeId?: string; vehicleId?: string };
+    const where: Record<string, unknown> = {};
+    if (query.routeId) where.routeId = query.routeId;
+    if (query.vehicleId) where.vehicleId = query.vehicleId;
+    return prisma.routeAssignment.findMany({
+      where,
+      orderBy: [{ routeId: "asc" }, { validFrom: "asc" }],
+    });
+  });
+
+  // ── Vehicle maintenance ────────────────────────────────────────────────
+  app.get("/api/vehicle-maintenance", async (request) => {
+    const query = request.query as { vehicleId?: string; status?: string };
+    const where: Record<string, unknown> = {};
+    if (query.vehicleId) where.vehicleId = query.vehicleId;
+    if (query.status) where.status = query.status;
+    return prisma.vehicleMaintenance.findMany({
+      where,
+      orderBy: [{ vehicleId: "asc" }, { startDate: "asc" }],
     });
   });
 
@@ -156,5 +196,49 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
       where: { orderId: id },
       data: body as never,
     });
+  });
+
+  // ── Passengers ──────────────────────────────────────────────────────────
+  app.get("/api/passengers", async (request) => {
+    const query = request.query as { state?: string; operatorId?: string };
+    return prisma.$queryRaw`
+      SELECT * FROM passenger_state
+      WHERE (${query.state ?? null}::text IS NULL OR state = ${query.state ?? null})
+        AND (${query.operatorId ?? null}::text IS NULL OR operator_id = ${query.operatorId ?? null})
+      ORDER BY passenger_id ASC
+    `;
+  });
+
+  app.get("/api/passengers/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.$queryRaw`
+      SELECT * FROM passenger_state WHERE passenger_id = ${id}
+    `;
+    return (rows as unknown[])[0] ?? null;
+  });
+
+  // ── Transit event history ───────────────────────────────────────────────
+  app.get("/api/cargo/:id/events", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.transitEvent.findMany({
+      where: { cargoId: id },
+      orderBy: { sequence: "asc" },
+    });
+  });
+
+  app.get("/api/passengers/:id/events", async (request) => {
+    const { id } = request.params as { id: string };
+    return prisma.transitEvent.findMany({
+      where: { passengerId: id },
+      orderBy: { sequence: "asc" },
+    });
+  });
+
+  // ── State machine lookup ────────────────────────────────────────────────
+  app.get("/api/transit/transitions", async () => {
+    return prisma.$queryRaw`
+      SELECT * FROM transit_transition
+      ORDER BY subject_type, from_state, event_type
+    `;
   });
 }

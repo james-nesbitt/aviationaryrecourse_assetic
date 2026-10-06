@@ -11,6 +11,7 @@ const navItems = [
   { to: "/routes", label: "Routes" },
   { to: "/staff", label: "Staff" },
   { to: "/customers", label: "Customers" },
+  { to: "/passengers", label: "Passengers" },
 ];
 
 export function AppLayout(): React.ReactElement {
