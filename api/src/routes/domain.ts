@@ -392,6 +392,140 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     return value;
   });
 
+  // ── Location activity: what is at each airport right now ────────────────
+  // Cargo and passenger locations come from their state projections (the
+  // location of each subject's last transit event); vehicles are counted at
+  // their base. "Currently at" is therefore the anchor-instant view.
+  app.get("/api/stats/locations", async (_request, reply) => {
+    const { value, hit } = await cached(
+      "stats:locations",
+      async () => {
+        const rows = await prisma.$queryRaw`
+          WITH cargo_at AS (
+            SELECT current_location_iata AS iata, count(*)::int AS cargo
+            FROM cargo_state WHERE current_location_iata IS NOT NULL GROUP BY 1
+          ),
+          pax_at AS (
+            SELECT current_location_iata AS iata, count(*)::int AS passengers
+            FROM passenger_state WHERE current_location_iata IS NOT NULL GROUP BY 1
+          ),
+          vehicles_at AS (
+            SELECT base_iata AS iata, count(*)::int AS vehicles
+            FROM vehicle WHERE base_iata IS NOT NULL GROUP BY 1
+          )
+          SELECT ap.iata, ap.name, ap.city, ap.country,
+                 COALESCE(c.cargo, 0)::int     AS cargo,
+                 COALESCE(p.passengers, 0)::int AS passengers,
+                 COALESCE(v.vehicles, 0)::int   AS vehicles
+          FROM airport ap
+          LEFT JOIN cargo_at c    ON c.iata = ap.iata
+          LEFT JOIN pax_at p      ON p.iata = ap.iata
+          LEFT JOIN vehicles_at v ON v.iata = ap.iata
+          WHERE COALESCE(c.cargo, 0) + COALESCE(p.passengers, 0) + COALESCE(v.vehicles, 0) > 0
+          ORDER BY (COALESCE(c.cargo, 0) + COALESCE(p.passengers, 0) + COALESCE(v.vehicles, 0)) DESC, ap.iata
+        `;
+        return { locations: rows };
+      },
+      TTL.stats,
+    );
+    reply.header("X-Cache", hit ? "hit" : "miss");
+    reply.header("Cache-Control", `private, max-age=${TTL.stats}`);
+    return value;
+  });
+
+  // ── Airport activity: the detail behind one row of the locations stats ──
+  // "There now" is the anchor-instant presence view; "through today" lists
+  // every trip leg touching this airport on the current operating day.
+  app.get("/api/airports/:id/activity", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [cargo, passengers, vehicles, throughToday] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT * FROM cargo_state WHERE current_location_iata = ${id}
+        ORDER BY cargo_id ASC
+      `,
+      prisma.$queryRaw`
+        SELECT * FROM passenger_state WHERE current_location_iata = ${id}
+        ORDER BY passenger_id ASC
+      `,
+      prisma.$queryRaw`
+        SELECT vehicle_id, registration, kind, model_id, status FROM vehicle
+        WHERE base_iata = ${id} ORDER BY vehicle_id ASC
+      `,
+      prisma.$queryRaw`
+        SELECT t.trip_id, t.route_id, t.operating_date, t.status, t.vehicle_id,
+               (l->>'sequence')::int                    AS sequence,
+               l->>'from_iata'                           AS from_iata,
+               l->>'to_iata'                             AS to_iata,
+               l->>'scheduled_departure'                 AS scheduled_departure,
+               l->>'scheduled_arrival'                   AS scheduled_arrival
+        FROM trip t,
+             jsonb_array_elements(t.legs) AS l
+        WHERE l->>'from_iata' = ${id} OR l->>'to_iata' = ${id}
+        ORDER BY l->>'scheduled_departure'
+        LIMIT 200
+      `,
+    ]);
+    reply.header("Cache-Control", `private, max-age=${TTL.stats}`);
+    return { iata: id, cargo, passengers, vehicles, through_today: throughToday };
+  });
+
+  // ── Accounts: customers under one account manager ──────────────────────
+  // Keyed on the staff record when the caller is linked; an unlinked
+  // administrator gets every customer, matching how the crew self-service
+  // views treat the identity link.
+  app.get("/api/accounts/overview", async (request, reply) => {
+    const user = request.user!;
+    const me = await prisma.staff.findUnique({
+      where: { keycloakUsername: user.username },
+    });
+    const managerId = me?.role === "account_manager" ? me.staffId : null;
+    const customers = await prisma.carrierCustomer.findMany({
+      where: managerId ? { accountManagerId: managerId } : {},
+      orderBy: { customerId: "asc" },
+    });
+    const customerIds = customers.map((c) => c.customerId);
+    const [ordersByMonth, cargoByMonth, openOrders, activeShipments] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT to_char(ordered_on, 'YYYY-MM') AS month, count(*)::int AS orders
+        FROM assetic_order
+        WHERE ${customerIds.length > 0}::boolean IS NOT TRUE OR customer_id = ANY(${customerIds}::text[])
+        GROUP BY 1 ORDER BY 1
+      `,
+      prisma.$queryRaw`
+        SELECT to_char(valid_time, 'YYYY-MM') AS month,
+               count(*)::int AS shipments,
+               COALESCE(sum(weight_kg), 0)::int AS weight_kg
+        FROM cargo
+        WHERE ${customerIds.length > 0}::boolean IS NOT TRUE OR customer_id = ANY(${customerIds}::text[])
+        GROUP BY 1 ORDER BY 1
+      `,
+      prisma.$queryRaw`
+        SELECT order_id, customer_id, order_type, status, origin_iata, destination_iata, ordered_on
+        FROM assetic_order
+        WHERE status IN ('requested', 'confirmed', 'in_progress')
+          AND (${customerIds.length > 0}::boolean IS NOT TRUE OR customer_id = ANY(${customerIds}::text[]))
+        ORDER BY ordered_on DESC
+      `,
+      prisma.$queryRaw`
+        SELECT cs.cargo_id, cs.customer_id, cs.customer_name, cs.state,
+               cs.current_location_iata, cs.destination_iata, cs.weight_kg
+        FROM cargo_state cs
+        WHERE cs.state NOT IN ('delivered')
+          AND (${customerIds.length > 0}::boolean IS NOT TRUE OR cs.customer_id = ANY(${customerIds}::text[]))
+        ORDER BY cs.cargo_id ASC
+      `,
+    ]);
+    reply.header("Cache-Control", `private, max-age=${TTL.stats}`);
+    return {
+      manager: managerId ? { staff_id: managerId, name: `${me?.givenName} ${me?.familyName}` } : null,
+      customers,
+      orders_by_month: ordersByMonth,
+      cargo_by_month: cargoByMonth,
+      open_orders: openOrders,
+      active_shipments: activeShipments,
+    };
+  });
+
   app.get("/api/stats/operations", async (request, reply) => {
     const query = request.query as { days?: string };
     const days = Math.min(Math.max(Number(query.days ?? 30) || 30, 1), 365);

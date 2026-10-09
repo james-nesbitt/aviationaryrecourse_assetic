@@ -32,21 +32,33 @@ interface Vehicle {
   operator_id: string;
   model_id: string | null;
 }
+interface LocationRow {
+  iata: string;
+  name: string;
+  city: string;
+  country: string;
+  cargo: number;
+  passengers: number;
+  vehicles: number;
+}
 
 /** Maintenance-manager landing page: fleet condition and service backlog. */
 export function FleetView(): React.ReactElement {
   const [stats, setStats] = useState<FleetStats | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [locations, setLocations] = useState<LocationRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       apiGet<FleetStats>("/api/stats/fleet"),
       apiGet<Vehicle[]>("/api/vehicles?kind=aircraft"),
+      apiGet<{ locations: LocationRow[] }>("/api/stats/locations"),
     ])
-      .then(([s, v]) => {
+      .then(([s, v, l]) => {
         setStats(s);
         setVehicles(v);
+        setLocations(l.locations);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -92,6 +104,25 @@ export function FleetView(): React.ReactElement {
         </Section>
       </div>
 
+      <Section title="Locations — currently on the ground">
+        <DataTable
+          rows={locations}
+          rowKey={(l) => l.iata}
+          columns={[
+            {
+              key: "airport",
+              header: "Airport",
+              render: (l) => <Link to={`/airports/${l.iata}`}>{`${l.iata} · ${l.name}`}</Link>,
+            },
+            { key: "city", header: "City", render: (l) => `${l.city}, ${l.country}` },
+            { key: "cargo", header: "Cargo", render: (l) => l.cargo },
+            { key: "pax", header: "Passengers", render: (l) => l.passengers },
+            { key: "veh", header: "Vehicles", render: (l) => l.vehicles },
+          ]}
+          empty="No recorded activity"
+        />
+      </Section>
+
       <Section title="Aircraft">
         <DataTable
           rows={vehicles}
@@ -103,8 +134,17 @@ export function FleetView(): React.ReactElement {
               render: (v) => <Link to={`/vehicles/${v.vehicle_id}`}>{v.registration ?? v.vehicle_id}</Link>,
             },
             { key: "model", header: "Model", render: (v) => v.model_id ?? "—" },
-            { key: "base", header: "Base", render: (v) => v.base_iata ?? "—" },
-            { key: "op", header: "Operator", render: (v) => v.operator_id },
+            {
+              key: "base",
+              header: "Base",
+              render: (v) =>
+                v.base_iata ? <Link to={`/airports/${v.base_iata}`}>{v.base_iata}</Link> : "—",
+            },
+            {
+              key: "op",
+              header: "Operator",
+              render: (v) => <Link to={`/operators/${v.operator_id}`}>{v.operator_id}</Link>,
+            },
             { key: "status", header: "Status", render: (v) => <Badge value={v.status ?? "unknown"} /> },
           ]}
         />

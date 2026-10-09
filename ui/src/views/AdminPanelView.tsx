@@ -77,6 +77,7 @@ export function AdminPanelView(): React.ReactElement {
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <Link to="/fleet">Fleet &amp; Maintenance →</Link>
           <Link to="/operations">Operations Control →</Link>
+          <Link to="/accounts">Accounts →</Link>
         </div>
       </Section>
     </div>

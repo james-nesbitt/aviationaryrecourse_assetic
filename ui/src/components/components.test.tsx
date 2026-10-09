@@ -16,6 +16,11 @@ describe("navigation gating", () => {
     expect(labels).toEqual(["Operations Control"]);
   });
 
+  it("gives an account manager only the accounts dashboard", () => {
+    const labels = visibleNavItems(["account_manager"], false).map((i) => i.label);
+    expect(labels).toEqual(["Accounts"]);
+  });
+
   it("shows My Schedule only when the account has a staff record", () => {
     expect(visibleNavItems(["crew"], true).map((i) => i.label)).toContain("My Schedule");
     expect(visibleNavItems(["crew"], false).map((i) => i.label)).not.toContain("My Schedule");
@@ -61,6 +66,10 @@ describe("landing page per persona", () => {
 
   it("sends a route manager to operations", () => {
     expect(landingPath(["route_manager"], false)).toBe("/operations");
+  });
+
+  it("sends an account manager to the accounts dashboard", () => {
+    expect(landingPath(["account_manager"], false)).toBe("/accounts");
   });
 
   it("sends linked crew to their own schedule", () => {

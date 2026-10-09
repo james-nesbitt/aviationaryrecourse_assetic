@@ -9,6 +9,8 @@ import { EntityListPage } from "./views/EntityListPage.js";
 import { FleetView } from "./views/fleet/FleetView.js";
 import { VehicleDetailPage } from "./views/fleet/VehicleDetailPage.js";
 import { MaintenanceDetailPage } from "./views/fleet/MaintenanceDetailPage.js";
+import { AirportDetailPage } from "./views/fleet/AirportDetailPage.js";
+import { AccountsView } from "./views/accounts/AccountsView.js";
 import { OperationsView } from "./views/operations/OperationsView.js";
 import { RouteDetailPage } from "./views/operations/RouteDetailPage.js";
 import { TripDetailPage } from "./views/operations/TripDetailPage.js";
@@ -35,6 +37,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }): React.Reac
  * as further tabs without touching routing.
  */
 const CUSTOM_DETAIL: Record<string, React.ReactElement> = {
+  "/airports": <AirportDetailPage />,
   "/operators": <OperatorDetailPage />,
   "/vehicles": <VehicleDetailPage />,
   "/routes": <RouteDetailPage />,
@@ -78,6 +81,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
           <Route path="vehicles/:id/maintenance/:mid" element={<MaintenanceDetailPage />} />
           <Route path="fleet" element={<FleetView />} />
+          <Route path="accounts" element={<AccountsView />} />
           <Route path="operations" element={<OperationsView />} />
           <Route path="my-trips" element={<MyTripsView />} />
         </Route>

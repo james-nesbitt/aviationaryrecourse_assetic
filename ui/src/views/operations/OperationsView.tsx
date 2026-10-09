@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { apiGet, type FatigueRow } from "../../lib/api.js";
 import { Badge, DataTable, Section, StatCard } from "../../components/index.jsx";
 import { BarStack } from "../../charts/index.jsx";
-import { formatHours } from "../../lib/format.js";
+import { formatDate, formatHours } from "../../lib/format.js";
 
 interface DayRow {
   operating_date: string;
@@ -33,6 +33,15 @@ interface RouteRow {
   first_operating_date: string;
 }
 
+interface MaintenanceRow {
+  maintenance_id: string;
+  vehicle_id: string;
+  maintenance_type: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+}
+
 const STATUSES = ["completed", "in_progress", "scheduled", "cancelled"];
 
 /** Route-manager landing page: trip volume, route health, crew fatigue. */
@@ -40,6 +49,7 @@ export function OperationsView(): React.ReactElement {
   const [stats, setStats] = useState<OpsStats | null>(null);
   const [routes, setRoutes] = useState<RouteRow[]>([]);
   const [fatigue, setFatigue] = useState<FatigueRow[]>([]);
+  const [maintenance, setMaintenance] = useState<MaintenanceRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,11 +57,13 @@ export function OperationsView(): React.ReactElement {
       apiGet<OpsStats>("/api/stats/operations?days=45"),
       apiGet<RouteRow[]>("/api/routes"),
       apiGet<FatigueRow[]>("/api/staff/fatigue"),
+      apiGet<MaintenanceRow[]>("/api/vehicle-maintenance"),
     ])
-      .then(([s, r, f]) => {
+      .then(([s, r, f, m]) => {
         setStats(s);
         setRoutes(r);
         setFatigue(f);
+        setMaintenance(m);
       })
       .catch((e: Error) => setError(e.message));
   }, []);
@@ -113,11 +125,65 @@ export function OperationsView(): React.ReactElement {
               ),
             },
             { key: "role", header: "Role", render: (f) => f.role },
+            {
+              key: "op",
+              header: "Operator",
+              render: (f) => <Link to={`/operators/${f.operator_id}`}>{f.operator_id}</Link>,
+            },
             { key: "duty", header: "Duty (7d)", render: (f) => formatHours(f.duty_hours_7d) },
             { key: "days", header: "Consecutive days", render: (f) => f.consecutive_duty_days },
             { key: "rest", header: "Rest", render: (f) => formatHours(f.rest_since_last_hours) },
             { key: "level", header: "Level", render: (f) => <Badge value={f.level} /> },
           ]}
+        />
+      </Section>
+
+      <Section title="Maintenance impact">
+        <DataTable
+          rows={maintenance.filter((w) => w.status !== "completed")}
+          rowKey={(w) => w.maintenance_id}
+          columns={[
+            {
+              key: "window",
+              header: "Window",
+              render: (w) => (
+                <Link to={`/vehicles/${w.vehicle_id}/maintenance/${w.maintenance_id}`}>
+                  {w.maintenance_type}
+                </Link>
+              ),
+            },
+            {
+              key: "vehicle",
+              header: "Vehicle",
+              render: (w) => <Link to={`/vehicles/${w.vehicle_id}`}>{w.vehicle_id}</Link>,
+            },
+            { key: "from", header: "From", render: (w) => formatDate(w.start_date) },
+            { key: "to", header: "To", render: (w) => formatDate(w.end_date) },
+            {
+              key: "routes",
+              header: "Affected routes",
+              render: (w) => {
+                const affected = routes.filter(
+                  (r) =>
+                    r.vehicle_id === w.vehicle_id &&
+                    r.first_operating_date.slice(0, 10) <= w.end_date.slice(0, 10),
+                );
+                return affected.length > 0 ? (
+                  <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+                    {affected.map((r) => (
+                      <Link key={r.route_id} to={`/routes/${r.route_id}`}>
+                        {r.route_id}
+                      </Link>
+                    ))}
+                  </span>
+                ) : (
+                  "—"
+                );
+              },
+            },
+            { key: "status", header: "Status", render: (w) => <Badge value={w.status} /> },
+          ]}
+          empty="No open maintenance windows"
         />
       </Section>
 
@@ -130,7 +196,11 @@ export function OperationsView(): React.ReactElement {
             { key: "type", header: "Type", render: (r) => r.route_type },
             { key: "base", header: "Base", render: (r) => r.base_iata },
             { key: "freq", header: "Every", render: (r) => `${r.frequency_days}d` },
-            { key: "vehicle", header: "Vehicle", render: (r) => r.vehicle_id },
+            {
+              key: "vehicle",
+              header: "Vehicle",
+              render: (r) => <Link to={`/vehicles/${r.vehicle_id}`}>{r.vehicle_id}</Link>,
+            },
             { key: "op", header: "Operator", render: (r) => r.operator_id },
           ]}
         />

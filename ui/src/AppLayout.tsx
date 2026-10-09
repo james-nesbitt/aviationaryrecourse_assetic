@@ -24,6 +24,7 @@ const navItems: { to: string; label: string; end?: boolean; gate: NavGate }[] = 
   { to: "/", label: "Admin", end: true, gate: "admin" },
   { to: "/fleet", label: "Fleet & Maintenance", gate: { role: "maintenance" } },
   { to: "/operations", label: "Operations Control", gate: { role: "route_manager" } },
+  { to: "/accounts", label: "Accounts", gate: { role: "account_manager" } },
   { to: "/my-trips", label: "My Schedule", gate: "staff" },
 ];
 
@@ -41,6 +42,7 @@ export function landingPath(roles: string[], hasStaffRecord: boolean): string {
   if (roles.some((r) => ADMIN_ROLES.includes(r))) return "/";
   if (roles.includes("maintenance")) return "/fleet";
   if (roles.includes("route_manager")) return "/operations";
+  if (roles.includes("account_manager")) return "/accounts";
   if (hasStaffRecord) return "/my-trips";
   return "/";
 }

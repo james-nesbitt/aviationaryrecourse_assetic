@@ -11,6 +11,15 @@ import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
 
+interface MaintenanceWindow {
+  maintenance_id: string;
+  vehicle_id: string;
+  maintenance_type: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+}
+
 interface RouteDetail {
   route_id: string;
   operator_id: string;
@@ -32,6 +41,7 @@ export function RouteDetailPage(): React.ReactElement {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [maintenance, setMaintenance] = useState<MaintenanceWindow[]>([]);
   const canEdit = (getUser()?.roles ?? []).includes("route_manager");
 
   const [effectiveFrom, setEffectiveFrom] = useState("");
@@ -39,10 +49,15 @@ export function RouteDetailPage(): React.ReactElement {
   const [vehicle, setVehicle] = useState("");
 
   function load(): void {
-    Promise.all([apiGet<RouteDetail>(`/api/routes/${id}`), apiGet<Trip[]>(`/api/routes/${id}/trips`)])
-      .then(([r, t]) => {
+    Promise.all([
+      apiGet<RouteDetail>(`/api/routes/${id}`),
+      apiGet<Trip[]>(`/api/routes/${id}/trips`),
+      apiGet<MaintenanceWindow[]>("/api/vehicle-maintenance"),
+    ])
+      .then(([r, t, m]) => {
         setRoute(r);
         setTrips(t);
+        setMaintenance(m.filter((w) => w.vehicle_id === r.vehicle_id));
         setFrequency(String(r.frequency_days));
         setVehicle(r.vehicle_id);
       })
@@ -136,6 +151,44 @@ export function RouteDetailPage(): React.ReactElement {
         </div>
       </Section>
 
+          </>) },
+          { key: "maintenance", label: "Maintenance", badge: maintenance.length, render: () => (<>
+      <Section title="Maintenance windows on this route's vehicles">
+        <DataTable
+          rows={maintenance}
+          rowKey={(w) => w.maintenance_id}
+          columns={[
+            {
+              key: "window",
+              header: "Window",
+              render: (w) => (
+                <Link to={`/vehicles/${w.vehicle_id}/maintenance/${w.maintenance_id}`}>
+                  {w.maintenance_type}
+                </Link>
+              ),
+            },
+            { key: "vehicle", header: "Vehicle", render: (w) => <Link to={`/vehicles/${w.vehicle_id}`}>{w.vehicle_id}</Link> },
+            { key: "from", header: "From", render: (w) => formatDate(w.start_date) },
+            { key: "to", header: "To", render: (w) => formatDate(w.end_date) },
+            { key: "status", header: "Status", render: (w) => <Badge value={w.status} /> },
+            {
+              key: "impact",
+              header: "Trips cancelled",
+              render: (w) => {
+                const inWindow = trips.filter(
+                  (t) =>
+                    t.status === "cancelled" &&
+                    t.vehicle_id === w.vehicle_id &&
+                    t.operating_date.slice(0, 10) >= w.start_date.slice(0, 10) &&
+                    t.operating_date.slice(0, 10) <= w.end_date.slice(0, 10),
+                );
+                return inWindow.length;
+              },
+            },
+          ]}
+          empty="No maintenance windows recorded for this route's vehicles"
+        />
+      </Section>
           </>) },
           { key: "manage", label: "Manage", render: () => (<>
       {canEdit ? (
