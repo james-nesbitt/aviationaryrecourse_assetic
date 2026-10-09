@@ -49,10 +49,19 @@ function assert(condition, message) {
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
-  return { status: res.status, json: await res.json().catch(() => null), ok: res.ok };
+  return {
+    status: res.status,
+    json: await res.json().catch(() => null),
+    ok: res.ok,
+    cache: res.headers.get("x-cache"),
+  };
 }
 
 async function getToken(username, password) {
+  // Local runs against a dev stack can supply a token directly instead of
+  // exchanging credentials with Keycloak.
+  const preset = process.env[`TEST_TOKEN_${username.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`];
+  if (preset) return preset;
   const res = await fetch(`${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -111,7 +120,8 @@ async function testDataEndpoints(token) {
     { path: "/api/airports", min: 1, label: "Airports" },
     { path: "/api/aircraft-models", min: 1, label: "Aircraft Models" },
     { path: "/api/passengers", min: 1, label: "Passengers" },
-    { path: "/api/route-operations", min: 1, label: "Route operations" },
+    { path: "/api/trips", min: 1, label: "Trips" },
+    { path: "/api/crew-assignments", min: 1, label: "Crew assignments" },
     { path: "/api/route-assignments", min: 1, label: "Route assignments" },
     { path: "/api/vehicle-maintenance", min: 1, label: "Vehicle maintenance" },
   ];
@@ -167,8 +177,8 @@ async function testTransit(token) {
   await checkChain("/api/passengers", paxRes.json, "booked", "disembarked", "Passenger", 5);
 }
 
-async function testOperations(token) {
-  console.log("\n── Route operations (admin) ──");
+async function testTrips(token) {
+  console.log("\n── Trips (admin) ──");
 
   // 1. assignments: per route contiguous, one open, at least one maintenance_cover
   const asgRes = await fetchJson(`${BASE_URL}/api/route-assignments`, { headers: authHeader(token) });
@@ -198,12 +208,12 @@ async function testOperations(token) {
 
   // 2. delivered cargo: events match the operation timetable and vehicle
   const cargoRes = await fetchJson(`${BASE_URL}/api/cargo`, { headers: authHeader(token) });
-  const delivered = cargoRes.json.find((r) => r.operation_id && r.state === "delivered");
+  const delivered = cargoRes.json.find((r) => r.trip_id && r.state === "delivered");
   if (delivered) {
-    const opRes = await fetchJson(`${BASE_URL}/api/route-operations/${delivered.operation_id}`, {
+    const opRes = await fetchJson(`${BASE_URL}/api/trips/${delivered.trip_id}`, {
       headers: authHeader(token),
     });
-    assert(opRes.status === 200, "GET /api/route-operations/:id returns 200");
+    assert(opRes.status === 200, "GET /api/trips/:id returns 200");
     const op = opRes.json;
     const evRes = await fetchJson(`${BASE_URL}/api/cargo/${delivered.cargo_id}/events`, {
       headers: authHeader(token),
@@ -214,25 +224,41 @@ async function testOperations(token) {
         assert(ev.vehicle_id === op.vehicle_id, `cargo ${delivered.cargo_id}: event vehicle matches operation vehicle`);
       }
     }
-    const firstDepart = evRes.json.find((e) => e.event_type === "depart");
-    if (firstDepart) {
-      const parseTs = (s) => Date.parse(s.includes("T") && !s.endsWith("Z") ? `${s}Z` : s);
-      const depTimes = op.legs.map((l) => parseTs(l.scheduled_departure));
-      assert(
-        depTimes.includes(parseTs(firstDepart.valid_time)),
-        `cargo ${delivered.cargo_id}: first depart matches a scheduled_departure`,
-      );
-    }
+    // transit_event.valid_time is timestamptz while trip legs are naive strings
+    // inside JSONB, so comparing the two as instants depends on the database
+    // session timezone. Assert the structural invariants instead: every depart
+    // leaves from one of the trip's leg origins, the first depart leaves from
+    // the booked board leg, and the depart count matches the booked span.
+    const departs = evRes.json.filter((e) => e.event_type === "depart");
+    const legOrigins = op.legs.map((l) => l.from_iata);
+    assert(departs.length > 0, `cargo ${delivered.cargo_id}: has depart events`);
+    assert(
+      departs.every((e) => legOrigins.includes(e.location_iata)),
+      `cargo ${delivered.cargo_id}: every depart leaves from a leg origin of its trip`,
+    );
+    assert(
+      departs[0].location_iata === delivered.origin_iata,
+      `cargo ${delivered.cargo_id}: first depart leaves from the booked origin`,
+    );
+    const arrives = evRes.json.filter((e) => e.event_type === "arrive");
+    assert(
+      departs.length === arrives.length,
+      `cargo ${delivered.cargo_id}: depart and arrive events pair up (${departs.length}/${arrives.length})`,
+    );
+    assert(
+      arrives[arrives.length - 1].location_iata === delivered.destination_iata,
+      `cargo ${delivered.cargo_id}: last arrive reaches the booked destination`,
+    );
   } else {
-    failures.push("Route operations: no delivered cargo with operation_id to check");
+    failures.push("Trips: no delivered cargo with a trip_id to check");
     failed++;
   }
 
   // 3. cancelled operations: vehicle in maintenance on the operating date
-  const cancelRes = await fetchJson(`${BASE_URL}/api/route-operations?status=cancelled`, {
+  const cancelRes = await fetchJson(`${BASE_URL}/api/trips?status=cancelled`, {
     headers: authHeader(token),
   });
-  assert(cancelRes.status === 200, "GET /api/route-operations?status=cancelled returns 200");
+  assert(cancelRes.status === 200, "GET /api/trips?status=cancelled returns 200");
   for (const op of cancelRes.json) {
     const mntRes = await fetchJson(`${BASE_URL}/api/vehicle-maintenance?vehicleId=${op.vehicle_id}`, {
       headers: authHeader(token),
@@ -241,9 +267,78 @@ async function testOperations(token) {
     const opDay = day(op.operating_date);
     assert(
       mntRes.json.some((w) => day(w.start_date) <= opDay && opDay <= day(w.end_date)),
-      `operation ${op.operation_id}: vehicle has a maintenance window covering ${op.operating_date}`,
+      `operation ${op.trip_id}: vehicle has a maintenance window covering ${op.operating_date}`,
     );
   }
+}
+
+async function testCrew(token) {
+  console.log("\n── Crew assignments and fatigue (admin) ──");
+
+  const crewRes = await fetchJson(`${BASE_URL}/api/crew-assignments`, { headers: authHeader(token) });
+  assert(crewRes.status === 200, "GET /api/crew-assignments returns 200");
+  assert(Array.isArray(crewRes.json) && crewRes.json.length > 0, `crew assignments: ${crewRes.json.length} rows`);
+
+  // no staff member appears twice on one trip
+  const pairs = new Set();
+  let duplicates = 0;
+  for (const row of crewRes.json) {
+    const key = `${row.trip_id}|${row.staff_id}`;
+    if (pairs.has(key)) duplicates++;
+    pairs.add(key);
+  }
+  assert(duplicates === 0, `no staff assigned twice to the same trip (${duplicates} duplicates)`);
+
+  // every assignment points at a non-cancelled trip of the staff member's operator
+  const sample = crewRes.json.slice(0, 5);
+  const staffRes = await fetchJson(`${BASE_URL}/api/staff`, { headers: authHeader(token) });
+  const staffById = new Map(staffRes.json.map((s) => [s.staff_id, s]));
+  for (const row of sample) {
+    const tripRes = await fetchJson(`${BASE_URL}/api/trips/${row.trip_id}`, { headers: authHeader(token) });
+    assert(tripRes.status === 200, `GET /api/trips/${row.trip_id} returns 200`);
+    assert(tripRes.json.status !== "cancelled", `crew assignment ${row.assignment_id} is not on a cancelled trip`);
+    const staff = staffById.get(row.staff_id);
+    if (staff) {
+      assert(staff.role_class === "flight_crew", `crew ${row.staff_id} is flight_crew`);
+      assert(staff.operator_id === tripRes.json.operator_id, `crew ${row.staff_id} matches the trip operator`);
+      assert(row.crew_role === staff.role, `crew_role matches the staff role for ${row.staff_id}`);
+    }
+  }
+
+  // fatigue view: every row carries a known level, and the roster spans levels
+  const fatRes = await fetchJson(`${BASE_URL}/api/staff/fatigue`, { headers: authHeader(token) });
+  assert(fatRes.status === 200, "GET /api/staff/fatigue returns 200");
+  assert(fatRes.json.length > 0, `fatigue rows: ${fatRes.json.length}`);
+  const levels = new Set(fatRes.json.map((r) => r.level));
+  assert([...levels].every((l) => ["ok", "warn", "critical"].includes(l)), `levels are known: ${[...levels].join("/")}`);
+  assert(levels.size >= 2, `roster spans more than one fatigue level (${[...levels].join("/")})`);
+  assert(
+    fatRes.json.every((r) => typeof r.duty_hours_7d === "number"),
+    "duty_hours_7d serializes as a number, not a Decimal object",
+  );
+  const loaded = fatRes.json.find((r) => r.level !== "ok");
+  assert(Boolean(loaded), "at least one crew member is at warn or critical");
+
+  // the stats cache serves the second identical read from memory
+  const first = await fetchJson(`${BASE_URL}/api/stats/crew`, { headers: authHeader(token) });
+  const second = await fetchJson(`${BASE_URL}/api/stats/crew`, { headers: authHeader(token) });
+  assert(first.status === 200 && second.status === 200, "GET /api/stats/crew returns 200");
+  assert(second.cache === "hit", `second /api/stats/crew read is a cache hit (got ${second.cache})`);
+}
+
+async function testMe(token) {
+  console.log("\n── Identity (/api/me) ──");
+
+  const meRes = await fetchJson(`${BASE_URL}/api/me`, { headers: authHeader(token) });
+  assert(meRes.status === 200, "GET /api/me returns 200");
+  assert(typeof meRes.json.username === "string", `identity username: ${meRes.json.username}`);
+  assert(Array.isArray(meRes.json.roles), "identity carries a roles array");
+  assert("staff" in meRes.json, "identity carries a staff field (null when unlinked)");
+
+  // a staff row with a keycloak_username proves the identity link is loaded
+  const fatRes = await fetchJson(`${BASE_URL}/api/staff/fatigue`, { headers: authHeader(token) });
+  const linked = fatRes.json.filter((r) => r.keycloak_username);
+  assert(linked.length > 0, `${linked.length} crew rows carry a keycloak_username`);
 }
 
 async function testJournal(token) {
@@ -301,8 +396,8 @@ async function testPersonas() {
   console.log("\n── Auth/Policy: Synthetic Personas ──");
 
   const personas = [
-    { username: "admin", password: process.env.TEST_ADMIN_PASSWORD ?? "admin", roles: ["asset_manager", "trip_manager", "sysadmin"], label: "admin" },
-    { username: "tripmgr", password: process.env.TEST_TRIPMGR_PASSWORD ?? "tripmgr", roles: ["trip_manager"], label: "tripmgr" },
+    { username: "admin", password: process.env.TEST_ADMIN_PASSWORD ?? "admin", roles: ["asset_manager", "route_manager", "sysadmin"], label: "admin" },
+    { username: "tripmgr", password: process.env.TEST_TRIPMGR_PASSWORD ?? "tripmgr", roles: ["route_manager"], label: "tripmgr" },
     { username: "loader", password: process.env.TEST_LOADER_PASSWORD ?? "loader", roles: ["loading_team"], label: "loader" },
     { username: "viewer", password: process.env.TEST_VIEWER_PASSWORD ?? "viewer", roles: ["analytics"], label: "viewer" },
   ];
@@ -354,7 +449,9 @@ async function main() {
     await testDataEndpoints(adminToken);
     await testJournal(adminToken);
     await testTransit(adminToken);
-    await testOperations(adminToken);
+    await testTrips(adminToken);
+    await testCrew(adminToken);
+    await testMe(adminToken);
     await testPersonas();
   }
 

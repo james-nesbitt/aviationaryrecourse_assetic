@@ -11,6 +11,23 @@ import { operatingDates, shiftLegs, tripStatus, type RouteLeg } from "../lib/tri
  * POC-grade authz — will be replaced by ABAC (OPA) per the spec.
  */
 
+/**
+ * Dataset anchor: the instant every status and horizon is measured against.
+ * Datagen writes it as generated_at on the rows it produces, and the API reads
+ * it from dataset_anchor_v so route writes land on the dataset's timeline
+ * rather than the server clock (a demo dataset dated in 2000 would otherwise
+ * generate decades of trips out to "today + 14 days").
+ */
+async function datasetAnchor(): Promise<{ anchorDate: Date; anchorAt: Date }> {
+  const rows = await prisma.$queryRaw<{ anchor_date: Date; anchor_at: Date }[]>`
+    SELECT anchor_date, anchor_at FROM dataset_anchor_v
+  `;
+  const row = rows[0];
+  const anchorDate = row?.anchor_date ? new Date(row.anchor_date) : new Date();
+  const anchorAt = row?.anchor_at ? new Date(row.anchor_at) : new Date();
+  return { anchorDate, anchorAt };
+}
+
 export async function registerDomainRoutes(app: FastifyInstance): Promise<void> {
   // ── Operators ──────────────────────────────────────────────────────────
   app.get("/api/operators", async () => {
@@ -497,9 +514,9 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     };
     const routeId = body.route_id ?? `rte-api-${Date.now().toString(36)}`;
     const firstDate = new Date(`${body.first_operating_date}T00:00:00Z`);
-    const anchorAt = new Date();
-    const horizon = new Date(Date.now() + 14 * 86_400_000);
-    const generatedAt = new Date(anchorAt.toISOString().slice(0, 10));
+    const { anchorDate, anchorAt } = await datasetAnchor();
+    const horizon = new Date(anchorDate.getTime() + 14 * 86_400_000);
+    const generatedAt = anchorDate;
 
     const route = await prisma.route.create({
       data: {
@@ -587,9 +604,9 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     const vehicleId = body.vehicle_id ?? route.vehicleId;
     const frequencyDays = body.frequency_days ?? route.frequencyDays;
     const legs = (body.legs ?? (route.legs as unknown as RouteLeg[])) as RouteLeg[];
-    const generatedAt = new Date(new Date().toISOString().slice(0, 10));
-    const anchorAt = new Date();
-    const horizon = new Date(Date.now() + 14 * 86_400_000);
+    const { anchorDate, anchorAt } = await datasetAnchor();
+    const generatedAt = anchorDate;
+    const horizon = new Date(anchorDate.getTime() + 14 * 86_400_000);
 
     const open = await prisma.routeAssignment.findFirst({
       where: { routeId: id, validTo: null },
@@ -709,13 +726,14 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
       };
     }
 
+    const { anchorDate } = await datasetAnchor();
     const created = await prisma.crewAssignment.create({
       data: {
         assignmentId: `crg-api-${body.trip_id}-${body.staff_id}`,
         tripId: body.trip_id,
         staffId: body.staff_id,
         crewRole: staff.role,
-        generatedAt: new Date(new Date().toISOString().slice(0, 10)),
+        generatedAt: anchorDate,
       },
     });
     invalidate("fatigue:", "stats:crew");
