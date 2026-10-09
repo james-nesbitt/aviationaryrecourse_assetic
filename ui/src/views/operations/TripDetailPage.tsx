@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiSend, type CrewMember, type FatigueRow, type Trip } from "../../lib/api.js";
-import { Badge, DataTable, DetailHeader, EmptyState, Section, StatCard } from "../../components/index.jsx";
+import { Badge, DataTable, DetailHeader, DetailTabs, EmptyState, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime, formatHours, legChain, tripHours } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
 
@@ -85,6 +85,9 @@ export function TripDetailPage(): React.ReactElement {
         <StatCard label="Passengers" value={passengers.length} />
       </div>
 
+      <DetailTabs
+        tabs={[
+          { key: "overview", label: "Timetable", render: () => (<>
       <Section title="Timetable">
         <DataTable
           rows={trip.legs}
@@ -99,6 +102,8 @@ export function TripDetailPage(): React.ReactElement {
         />
       </Section>
 
+          </>) },
+          { key: "crew", label: "Crew", badge: crew.length, render: () => (<>
       <Section title="Crew">
         <DataTable
           rows={crew}
@@ -136,6 +141,8 @@ export function TripDetailPage(): React.ReactElement {
         ) : null}
       </Section>
 
+          </>) },
+          { key: "cargo", label: "Cargo", badge: cargo.length, render: () => (<>
       <Section title="Cargo on board">
         <DataTable
           rows={cargo}
@@ -150,6 +157,8 @@ export function TripDetailPage(): React.ReactElement {
         />
       </Section>
 
+          </>) },
+          { key: "pax", label: "Passengers", badge: passengers.length, render: () => (<>
       <Section title="Passengers on board">
         <DataTable
           rows={passengers.slice(0, 25)}
@@ -161,6 +170,9 @@ export function TripDetailPage(): React.ReactElement {
           empty="No passengers booked on this trip"
         />
       </Section>
+          </>) },
+        ]}
+      />
     </div>
   );
 }

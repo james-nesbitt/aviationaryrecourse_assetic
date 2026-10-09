@@ -81,6 +81,20 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     });
   });
 
+  app.get("/api/customers/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const customer = await prisma.carrierCustomer.findUnique({
+      where: { customerId: id },
+      include: { operator: true },
+    });
+    if (!customer) return null;
+    const [orders, cargo] = await Promise.all([
+      prisma.asseticOrder.findMany({ where: { customerId: id }, orderBy: { orderedOn: "desc" } }),
+      prisma.$queryRaw`SELECT * FROM cargo_state WHERE customer_id = ${id} ORDER BY valid_time DESC`,
+    ]);
+    return { ...customer, orders, cargo };
+  });
+
   // ── Cargo ──────────────────────────────────────────────────────────────
   app.get("/api/cargo", async (request) => {
     const query = request.query as { state?: string; operatorId?: string };
@@ -90,6 +104,22 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
         AND (${query.operatorId ?? null}::text IS NULL OR operator_id = ${query.operatorId ?? null})
       ORDER BY cargo_id ASC
     `;
+  });
+
+  app.get("/api/cargo/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
+      SELECT * FROM cargo_state WHERE cargo_id = ${id}
+    `;
+    const cargo = rows[0];
+    if (!cargo) return null;
+    const [events, trip] = await Promise.all([
+      prisma.transitEvent.findMany({ where: { cargoId: id }, orderBy: { sequence: "asc" } }),
+      cargo.trip_id
+        ? prisma.trip.findUnique({ where: { tripId: cargo.trip_id as string } })
+        : Promise.resolve(null),
+    ]);
+    return { ...cargo, events, trip };
   });
 
   // ── Routes ─────────────────────────────────────────────────────────────

@@ -212,6 +212,37 @@ endpoints, and `crew_fatigue_v` reads) are served through a cache layer:
 
 ## 5. UI refactor
 
+### 5.0 Entity view contract (decided 2026-10-09)
+
+Every entity has exactly three views, declared once per entity in the
+registry `ui/src/lib/entities.tsx`:
+
+| View | Where it appears | Source |
+|---|---|---|
+| **row** | a line in the list table | `columns` |
+| **summary** | the panel a list row expands into, with a link onward | `expansion` |
+| **detail** | a page of its own | `detailPath` + a page component |
+
+One generic `EntityListPage` renders every list from the registry, so
+adding an entity means adding a registry entry rather than writing a view.
+Entities with a bespoke dashboard (operator, vehicle, route, trip, staff,
+customer, order, cargo, passenger, maintenance window) route to it;
+reference data (airports, aircraft models) and subordinate records
+(route and crew assignments) fall back to `ReferenceDetailPage`, which
+promotes the summary view to a page.
+
+Detail pages are tabbed shells (`DetailTabs`), not fixed layouts. The first
+tab carries the identifying facts and later tabs hold history, statistics,
+manifests and management actions. Entities will gain further views over
+time, including views specific to one entity type; those arrive as
+additional tabs on the detail page rather than as new navigation entries
+or new list pages.
+
+Navigation lists workspaces, not entities: the admin panel (admin roles),
+the two role dashboards, and a personal schedule for accounts linked to a
+staff record. Entity lists are reached from the admin panel or by links
+from a dashboard, so they are deliberately absent from the sidebar.
+
 ### 5.1 Structure
 
 ```

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, type FatigueRow, type TripLeg } from "../../lib/api.js";
-import { Badge, DataTable, DetailHeader, Section, StatCard } from "../../components/index.jsx";
+import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatHours, legChain, tripHours } from "../../lib/format.js";
 
 interface StaffAssignment {
@@ -71,6 +71,9 @@ export function StaffDetailPage(): React.ReactElement {
         <StatCard label="Upcoming" value={upcoming.length} />
       </div>
 
+      <DetailTabs
+        tabs={[
+          { key: "overview", label: "Overview", render: () => (<>
       <Section title="Details">
         <div style={{ fontSize: "0.9rem", color: "#444" }}>
           <div>Hired: {formatDate(staff.hire_date)}</div>
@@ -79,6 +82,8 @@ export function StaffDetailPage(): React.ReactElement {
         </div>
       </Section>
 
+          </>) },
+          { key: "duty", label: "Duty record", badge: staff.assignments.length, render: () => (<>
       <Section title="Duty record">
         <DataTable
           rows={staff.assignments.slice(0, 30)}
@@ -95,6 +100,9 @@ export function StaffDetailPage(): React.ReactElement {
           empty="No crew assignments"
         />
       </Section>
+          </>) },
+        ]}
+      />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   type Trip,
   type TripLeg,
 } from "../../lib/api.js";
-import { Badge, DataTable, DetailHeader, Section, StatCard, Timeline } from "../../components/index.jsx";
+import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline } from "../../components/index.jsx";
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
 
@@ -92,6 +92,9 @@ export function RouteDetailPage(): React.ReactElement {
         <StatCard label="Next trip" value={route.next_trip ? formatDate(route.next_trip.operating_date) : "—"} />
       </div>
 
+      <DetailTabs
+        tabs={[
+          { key: "overview", label: "Overview", render: () => (<>
       <Section title="Pattern legs">
         <DataTable
           rows={route.legs}
@@ -106,6 +109,8 @@ export function RouteDetailPage(): React.ReactElement {
         />
       </Section>
 
+          </>) },
+          { key: "assignments", label: "Vehicle assignments", badge: route.assignments.length, render: () => (<>
       <Section title="Vehicle assignments">
         <Timeline
           items={route.assignments.map((a) => ({
@@ -131,6 +136,8 @@ export function RouteDetailPage(): React.ReactElement {
         </div>
       </Section>
 
+          </>) },
+          { key: "manage", label: "Manage", render: () => (<>
       {canEdit ? (
         <Section title="Change this route">
           <form onSubmit={submitChange} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -164,6 +171,8 @@ export function RouteDetailPage(): React.ReactElement {
         </Section>
       ) : null}
 
+          </>) },
+          { key: "trips", label: "Trips", badge: route.trip_count, render: () => (<>
       <Section title="Trips">
         <DataTable
           rows={trips.slice(0, 30)}
@@ -176,6 +185,9 @@ export function RouteDetailPage(): React.ReactElement {
           ]}
         />
       </Section>
+          </>) },
+        ]}
+      />
     </div>
   );
 }

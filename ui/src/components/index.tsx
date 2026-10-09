@@ -73,6 +73,68 @@ export function DetailHeader({
   );
 }
 
+export interface DetailTab {
+  key: string;
+  label: string;
+  /** Rendered only while selected, so a tab's queries stay lazy. */
+  render: () => React.ReactNode;
+  /** Optional count shown beside the label. */
+  badge?: number;
+}
+
+/**
+ * Tab strip for an entity detail page.
+ *
+ * Every entity has three views: a row view used in list tables, a summary
+ * view shown when a list row expands, and this detail view. The detail view
+ * is a shell rather than a fixed layout: "Overview" carries the identifying
+ * facts, and further tabs hold the per-entity views — history, statistics,
+ * manifests, management actions — so entity-specific views can be added
+ * later without changing navigation or the list pattern.
+ */
+export function DetailTabs({ tabs }: { tabs: DetailTab[] }): React.ReactElement {
+  const [active, setActive] = React.useState(tabs[0]?.key ?? "");
+  const current = tabs.find((t) => t.key === active) ?? tabs[0];
+
+  return (
+    <div>
+      <div
+        role="tablist"
+        style={{ display: "flex", gap: 4, borderBottom: "1px solid #ddd", marginBottom: 16 }}
+      >
+        {tabs.map((tab) => {
+          const selected = tab.key === current?.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setActive(tab.key)}
+              style={{
+                border: "none",
+                borderBottom: selected ? "2px solid #1565c0" : "2px solid transparent",
+                background: "none",
+                padding: "8px 14px",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                color: selected ? "#1565c0" : "#555",
+                fontWeight: selected ? 600 : 400,
+              }}
+            >
+              {tab.label}
+              {tab.badge !== undefined ? (
+                <span style={{ color: "#888", marginLeft: 6 }}>{tab.badge}</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      <div role="tabpanel">{current?.render()}</div>
+    </div>
+  );
+}
+
 export function EmptyState({ message }: { message: string }): React.ReactElement {
   return <div style={{ color: "#777", padding: "12px 0" }}>{message}</div>;
 }
@@ -132,6 +194,114 @@ export function DataTable<T>({
             ))}
           </tr>
         ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Label/value pairs; the standard body of an expanded list row. */
+export function FieldGrid({
+  fields,
+}: {
+  fields: { label: string; value: React.ReactNode }[];
+}): React.ReactElement {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+        gap: "8px 24px",
+      }}
+    >
+      {fields.map((f) => (
+        <div key={f.label}>
+          <div style={{ fontSize: "0.72rem", color: "#777", textTransform: "uppercase" }}>{f.label}</div>
+          <div style={{ fontSize: "0.9rem" }}>{f.value ?? "—"}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * List table where every row expands in place to show more fields and links
+ * to that entity's detail page. This is the standard list pattern: the
+ * summary columns identify the row, the expansion answers "what is this"
+ * without navigating, and the detail link opens the full dashboard.
+ */
+export function ExpandableTable<T>({
+  rows,
+  columns,
+  rowKey,
+  detailPath,
+  expansion,
+  empty = "No records",
+  detailLabel = "Open",
+}: {
+  rows: T[];
+  columns: Column<T>[];
+  rowKey: (row: T) => string;
+  /** Omitted for reference entities that have no detail page of their own. */
+  detailPath?: (row: T) => string;
+  expansion: (row: T) => { label: string; value: React.ReactNode }[];
+  empty?: string;
+  detailLabel?: string;
+}): React.ReactElement {
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  if (rows.length === 0) return <EmptyState message={empty} />;
+
+  return (
+    <table style={{ borderCollapse: "collapse", width: "100%" }}>
+      <thead>
+        <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd", color: "#555" }}>
+          <th style={{ padding: "8px 12px", width: 28 }} aria-label="expand" />
+          {columns.map((c) => (
+            <th key={c.key} style={{ padding: "8px 12px", fontSize: "0.85rem" }}>
+              {c.header}
+            </th>
+          ))}
+          {detailPath ? <th style={{ padding: "8px 12px", fontSize: "0.85rem" }}>Detail</th> : null}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const key = rowKey(row);
+          const isOpen = expanded === key;
+          return (
+            <React.Fragment key={key}>
+              <tr
+                onClick={() => setExpanded(isOpen ? null : key)}
+                style={{ borderBottom: "1px solid #eee", cursor: "pointer" }}
+              >
+                <td style={{ padding: "8px 12px", color: "#888" }} aria-label={isOpen ? "collapse" : "expand"}>
+                  {isOpen ? "▾" : "▸"}
+                </td>
+                {columns.map((c) => (
+                  <td key={c.key} style={{ padding: "8px 12px", fontSize: "0.9rem" }}>
+                    {c.render(row)}
+                  </td>
+                ))}
+                {detailPath ? (
+                  <td style={{ padding: "8px 12px", fontSize: "0.9rem" }} onClick={(e) => e.stopPropagation()}>
+                    <Link to={detailPath(row)}>{detailLabel} →</Link>
+                  </td>
+                ) : null}
+              </tr>
+              {isOpen ? (
+                <tr>
+                  <td colSpan={columns.length + (detailPath ? 2 : 1)} style={{ padding: "12px 16px", background: "#f9f9f9" }}>
+                    <FieldGrid fields={expansion(row)} />
+                    {detailPath ? (
+                      <div style={{ marginTop: 10 }}>
+                        <Link to={detailPath(row)}>Open full detail →</Link>
+                      </div>
+                    ) : null}
+                  </td>
+                </tr>
+              ) : null}
+            </React.Fragment>
+          );
+        })}
       </tbody>
     </table>
   );

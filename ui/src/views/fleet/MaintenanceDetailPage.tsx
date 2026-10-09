@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, type MaintenanceWindow, type Trip } from "../../lib/api.js";
-import { Badge, DataTable, DetailHeader, EmptyState, Section, StatCard } from "../../components/index.jsx";
+import { Badge, DataTable, DetailHeader, DetailTabs, EmptyState, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, legChain } from "../../lib/format.js";
 
 /**
@@ -56,6 +56,9 @@ export function MaintenanceDetailPage(): React.ReactElement {
         <StatCard label="Cancelled" value={cancelled} tone="cancelled" />
       </div>
 
+      <DetailTabs
+        tabs={[
+          { key: "overview", label: "Affected trips", badge: affected.length, render: () => (<>
       <Section title="Trips during this window">
         {affected.length === 0 ? (
           <EmptyState message="No trips of this aircraft fall inside the window — its routes were covered by another aircraft." />
@@ -73,6 +76,9 @@ export function MaintenanceDetailPage(): React.ReactElement {
           />
         )}
       </Section>
+          </>) },
+        ]}
+      />
     </div>
   );
 }

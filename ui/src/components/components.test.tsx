@@ -1,56 +1,74 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { visibleNavItems } from "../AppLayout.js";
-import { Badge, DataTable, StatCard, Timeline } from "./index.jsx";
+import { visibleNavItems, landingPath } from "../AppLayout.js";
+import { Badge, DataTable, DetailTabs, StatCard, Timeline } from "./index.jsx";
 import { DonutBreakdown, LineTrend } from "../charts/index.jsx";
 
-describe("role-gated navigation", () => {
-  it("shows only the maintenance section to a maintenance manager", () => {
-    const labels = visibleNavItems(["maintenance"]).map((i) => i.label);
+describe("navigation gating", () => {
+  it("gives a maintenance manager only the fleet dashboard", () => {
+    const labels = visibleNavItems(["maintenance"], false).map((i) => i.label);
+    expect(labels).toEqual(["Fleet & Maintenance"]);
+  });
+
+  it("gives a route manager only the operations dashboard", () => {
+    const labels = visibleNavItems(["route_manager"], false).map((i) => i.label);
+    expect(labels).toEqual(["Operations Control"]);
+  });
+
+  it("shows My Schedule only when the account has a staff record", () => {
+    expect(visibleNavItems(["crew"], true).map((i) => i.label)).toContain("My Schedule");
+    expect(visibleNavItems(["crew"], false).map((i) => i.label)).not.toContain("My Schedule");
+  });
+
+  it("withholds My Schedule from an admin who holds the crew role but has no staff record", () => {
+    const labels = visibleNavItems(["asset_manager", "crew"], false).map((i) => i.label);
+    expect(labels).toContain("Admin");
     expect(labels).toContain("Fleet & Maintenance");
-    expect(labels).not.toContain("Operations Control");
+    expect(labels).toContain("Operations Control");
     expect(labels).not.toContain("My Schedule");
   });
 
-  it("shows only the operations section to a route manager", () => {
-    const labels = visibleNavItems(["route_manager"]).map((i) => i.label);
-    expect(labels).toContain("Operations Control");
-    expect(labels).not.toContain("Fleet & Maintenance");
+  it("gives admin roles the admin panel and both role dashboards", () => {
+    for (const role of ["asset_manager", "sysadmin"]) {
+      const labels = visibleNavItems([role], false).map((i) => i.label);
+      expect(labels).toContain("Admin");
+      expect(labels).toContain("Fleet & Maintenance");
+      expect(labels).toContain("Operations Control");
+    }
   });
 
-  it("shows only the schedule section to crew", () => {
-    const labels = visibleNavItems(["crew"]).map((i) => i.label);
-    expect(labels).toContain("My Schedule");
-    expect(labels).not.toContain("Operations Control");
+  it("withholds the admin panel from non-admin roles", () => {
+    expect(visibleNavItems(["maintenance"], false).map((i) => i.label)).not.toContain("Admin");
+    expect(visibleNavItems(["route_manager"], true).map((i) => i.label)).not.toContain("Admin");
   });
 
-  it("shows every section to a user holding all roles", () => {
-    const labels = visibleNavItems(["maintenance", "route_manager", "crew"]).map((i) => i.label);
-    expect(labels).toContain("Fleet & Maintenance");
-    expect(labels).toContain("Operations Control");
-    expect(labels).toContain("My Schedule");
+  it("keeps entity lists out of the navigation", () => {
+    const labels = visibleNavItems(["asset_manager", "sysadmin"], true).map((i) => i.label);
+    expect(labels).not.toContain("Vehicles");
+    expect(labels).not.toContain("Cargo");
+  });
+});
+
+describe("landing page per persona", () => {
+  it("sends admins to the admin panel", () => {
+    expect(landingPath(["asset_manager"], false)).toBe("/");
   });
 
-  it("shows every section to an asset_manager admin without persona roles", () => {
-    const labels = visibleNavItems(["asset_manager"]).map((i) => i.label);
-    expect(labels).toContain("Fleet & Maintenance");
-    expect(labels).toContain("Operations Control");
-    expect(labels).toContain("My Schedule");
+  it("sends a maintenance manager to the fleet dashboard", () => {
+    expect(landingPath(["maintenance"], false)).toBe("/fleet");
   });
 
-  it("shows every section to a sysadmin without persona roles", () => {
-    const labels = visibleNavItems(["sysadmin"]).map((i) => i.label);
-    expect(labels).toContain("Fleet & Maintenance");
-    expect(labels).toContain("Operations Control");
-    expect(labels).toContain("My Schedule");
+  it("sends a route manager to operations", () => {
+    expect(landingPath(["route_manager"], false)).toBe("/operations");
   });
 
-  it("keeps the shared domain lists visible without any role", () => {
-    const labels = visibleNavItems([]).map((i) => i.label);
-    expect(labels).toContain("Vehicles");
-    expect(labels).toContain("Dashboard");
-    expect(labels).not.toContain("Fleet & Maintenance");
+  it("sends linked crew to their own schedule", () => {
+    expect(landingPath(["crew"], true)).toBe("/my-trips");
+  });
+
+  it("falls back to the root for an account with neither role nor staff record", () => {
+    expect(landingPath([], false)).toBe("/");
   });
 });
 
@@ -101,6 +119,31 @@ describe("shared components", () => {
     );
     expect(screen.getByText("a_check")).toBeTruthy();
     expect(container.querySelectorAll("div[title]").length).toBe(2);
+  });
+});
+
+describe("detail tabs", () => {
+  const tabs = [
+    { key: "overview", label: "Overview", render: () => <div>overview body</div> },
+    { key: "history", label: "History", badge: 3, render: () => <div>history body</div> },
+  ];
+
+  it("renders the first tab by default", () => {
+    render(<DetailTabs tabs={tabs} />);
+    expect(screen.getByText("overview body")).toBeTruthy();
+    expect(screen.queryByText("history body")).toBeNull();
+  });
+
+  it("switches the panel when another tab is selected", () => {
+    render(<DetailTabs tabs={tabs} />);
+    fireEvent.click(screen.getByRole("tab", { name: /History/ }));
+    expect(screen.getByText("history body")).toBeTruthy();
+    expect(screen.queryByText("overview body")).toBeNull();
+  });
+
+  it("shows a count beside a tab that supplies one", () => {
+    render(<DetailTabs tabs={tabs} />);
+    expect(screen.getByRole("tab", { name: /History 3/ })).toBeTruthy();
   });
 });
 

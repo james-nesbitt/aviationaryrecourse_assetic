@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, type MaintenanceWindow, type Trip } from "../../lib/api.js";
-import { Badge, DataTable, DetailHeader, Section, StatCard, Timeline } from "../../components/index.jsx";
+import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline } from "../../components/index.jsx";
 import { BarStack, LineTrend } from "../../charts/index.jsx";
 import { formatDate, legChain } from "../../lib/format.js";
 
@@ -81,6 +81,9 @@ export function VehicleDetailPage(): React.ReactElement {
         <StatCard label="Service events" value={maintenance.length} />
       </div>
 
+      <DetailTabs
+        tabs={[
+          { key: "overview", label: "Overview", render: () => (<>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
         <Section title="Trips per month">
           <LineTrend
@@ -102,6 +105,8 @@ export function VehicleDetailPage(): React.ReactElement {
         </Section>
       </div>
 
+          </>) },
+          { key: "service", label: "Service record", badge: maintenance.length, render: () => (<>
       <Section title="Service record">
         <Timeline
           items={maintenance.map((w) => ({
@@ -133,6 +138,8 @@ export function VehicleDetailPage(): React.ReactElement {
         </div>
       </Section>
 
+          </>) },
+          { key: "trips", label: "Flight history", badge: trips.length, render: () => (<>
       <Section title="Flight history">
         <DataTable
           rows={recent}
@@ -147,6 +154,9 @@ export function VehicleDetailPage(): React.ReactElement {
           empty="No trips recorded"
         />
       </Section>
+          </>) },
+        ]}
+      />
     </div>
   );
 }
