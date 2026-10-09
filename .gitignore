@@ -24,3 +24,5 @@ datagen-out/
 # OS
 .DS_Store
 Thumbs.db
+
+api/.smoke/

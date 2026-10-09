@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import { authHook } from "./lib/authHook.js";
 import { snakeKeys } from "./lib/serialize.js";
 import { registerDomainRoutes } from "./routes/domain.js";
+import { registerIdentityRoutes } from "./routes/me.js";
 import { registerJournalRoutes } from "./routes/journal.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -43,6 +44,7 @@ app.get("/api/auth/config", async () => ({
 
 // Domain + journal routes
 await registerDomainRoutes(app);
+await registerIdentityRoutes(app);
 await registerJournalRoutes(app);
 
 app.listen({ port: PORT, host: HOST }, (err) => {
