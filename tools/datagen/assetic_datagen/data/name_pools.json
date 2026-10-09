@@ -25,6 +25,6 @@
     "maintenance_tech": ["EASA_Part_66", "FAA_A&P", "borescope", "NDT_level_II"],
     "fueler": ["fuel_safety", "static_electricity_control", "airfield_driving"],
     "account_manager": ["CRM_systems", "contract_law_basics", "revenue_management", "customer_success"],
-    "trip_manager": ["dispatch_ops", "slot_coordination", "load_planning", "regulatory_compliance"]
+    "route_manager": ["dispatch_ops", "slot_coordination", "load_planning", "regulatory_compliance"]
   }
 }
