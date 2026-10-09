@@ -51,12 +51,21 @@ npm run load:data -- --dir /tmp/datagen-out
 
 ### POC users (Keycloak realm: assetic)
 
-| User     | Password  | Roles                                        |
-|----------|-----------|----------------------------------------------|
-| admin    | admin     | asset_manager, account_manager, trip_manager, sysadmin |
-| tripmgr  | tripmgr   | trip_manager                                 |
-| loader   | loader    | loading_team                                 |
-| viewer   | viewer    | analytics                                    |
+| User                  | Password              | Roles                                                          | Lands on |
+|-----------------------|-----------------------|----------------------------------------------------------------|----------|
+| admin                 | admin                 | asset_manager, account_manager, route_manager, sysadmin, maintenance, crew | everything |
+| tripmgr               | tripmgr               | route_manager                                                  | Operations Control |
+| m.route_manager-0002  | m.route_manager-0002  | route_manager (linked to a staff record)                       | Operations Control |
+| maintmgr              | maintmgr              | maintenance                                                    | Fleet & Maintenance |
+| n.cabin_crew-0007     | n.cabin_crew-0007     | crew (linked to a staff record)                                | My Schedule |
+| loader                | loader                | loading_team                                                   | shared lists |
+| viewer                | viewer                | analytics                                                      | shared lists |
+
+Role sections are additive: `asset_manager` and `sysadmin` see every
+dashboard without the persona roles being mapped individually. Usernames of
+the form `<initial>.<role>-<id>` match `staff.keycloak_username` in the
+generated dataset, so `/api/me` resolves them to a staff record and the crew
+self-service views have data.
 
 ## Kubernetes deployment
 

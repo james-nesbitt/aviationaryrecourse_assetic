@@ -15,7 +15,7 @@
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
+      "directAccessGrantsEnabled": true,
       "redirectUris": [
         "https://assetic.home.arpa/callback",
         "http://assetic.home.arpa/callback",
@@ -179,15 +179,15 @@
       ]
     },
     {
-      "username": "m.captain-0004",
+      "username": "n.cabin_crew-0007",
       "enabled": true,
-      "email": "m.captain-0004@assetic.local",
-      "firstName": "Captain",
-      "lastName": "Demo",
+      "email": "n.cabin_crew-0007@assetic.local",
+      "firstName": "Nadia",
+      "lastName": "Tanaka",
       "credentials": [
         {
           "type": "password",
-          "value": "m.captain-0004",
+          "value": "n.cabin_crew-0007",
           "temporary": false
         }
       ],
@@ -196,15 +196,15 @@
       ]
     },
     {
-      "username": "o.route_manager-0002",
+      "username": "m.route_manager-0002",
       "enabled": true,
-      "email": "o.route_manager-0002@assetic.local",
-      "firstName": "Route",
-      "lastName": "Manager",
+      "email": "m.route_manager-0002@assetic.local",
+      "firstName": "Mara",
+      "lastName": "Sorensen",
       "credentials": [
         {
           "type": "password",
-          "value": "o.route_manager-0002",
+          "value": "m.route_manager-0002",
           "temporary": false
         }
       ],
