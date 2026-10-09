@@ -79,11 +79,47 @@ Requires:
 - An IngressClass (or use the NodePort fallback on port 30080)
 - The API and UI images (`assetic/api:latest`, `assetic/ui:latest`) available to the cluster
 
+### ConfigMaps carrying source, data and schema
+
+The POC builds from source inside initContainers, so four ConfigMaps must be
+refreshed whenever the corresponding inputs change:
+
+```bash
+kubectl -n assetic-poc create configmap assetic-db-migrations \
+  --from-file=001_initial_schema.sql=db/migrations/001_initial_schema.sql \
+  --from-file=002_app_role.sql=db/migrations/002_app_role.sql \
+  --from-file=003_journal_hash_function.sql=db/migrations/003_journal_hash_function.sql \
+  --from-file=004_location_tracking.sql=db/migrations/004_location_tracking.sql \
+  --from-file=005_route_recurrence.sql=db/migrations/005_route_recurrence.sql \
+  --from-file=006_trips_crew.sql=db/migrations/006_trips_crew.sql \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+`assetic-api-source` and `assetic-ui-source` take a `source.tar.gz` of the
+respective package; `assetic-datagen-data` takes a `data.tar.gz` of the
+datagen output directory.
+
+The `keycloak-realm` ConfigMap must contain exactly one key. Keycloak imports
+every file in its import directory and skips any realm that already exists, so
+a stale second key (for example both `realm.json` and `realm-import.json`)
+silently shadows the intended file and the import is reported as
+`Realm 'assetic' already exists. Import skipped`. Recreate rather than patch:
+
+```bash
+kubectl -n assetic-poc delete configmap keycloak-realm
+kubectl -n assetic-poc create configmap keycloak-realm \
+  --from-file=realm.json=infra/keycloak/realm-import.json
+kubectl -n assetic-poc delete pod -l app.kubernetes.io/name=keycloak
+```
+
 ## Database schema
 
 Matches the `tools/datagen` JSONL output exactly:
-- 9 entity tables: operator, vehicle, ownership_history, staff, facility, carrier_customer, cargo, route, assetic_order
-- 2 reference tables: airport, aircraft_model
+- Entity tables: operator, vehicle, ownership_history, staff, facility,
+  carrier_customer, route, route_assignment, vehicle_maintenance, trip,
+  crew_assignment, cargo, assetic_order, passenger, transit_event
+- Reference tables: airport, aircraft_model
+- Views: cargo_state, passenger_state, crew_fatigue_v, dataset_anchor_v
 - 1 append-only hash-chained bitemporal journal: journal_entry
 - Application role `assetic_app` with INSERT-only access to the journal (enforced at DB GRANT level)
 
