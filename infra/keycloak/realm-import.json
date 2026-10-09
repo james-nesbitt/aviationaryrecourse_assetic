@@ -49,14 +49,42 @@
   ],
   "roles": {
     "realm": [
-      { "name": "asset_manager", "description": "Manage asset masters, fleet config" },
-      { "name": "account_manager", "description": "Manage customers and contracts" },
-      { "name": "trip_manager", "description": "Manage trips and dispatches" },
-      { "name": "maintenance", "description": "Manage maintenance records" },
-      { "name": "loading_team", "description": "Manage cargo loading and custody" },
-      { "name": "on_board_staff", "description": "On-board operations" },
-      { "name": "analytics", "description": "Read-only analytics access" },
-      { "name": "sysadmin", "description": "System administration (no domain PII)" }
+      {
+        "name": "asset_manager",
+        "description": "Manage asset masters, fleet config"
+      },
+      {
+        "name": "account_manager",
+        "description": "Manage customers and contracts"
+      },
+      {
+        "name": "route_manager",
+        "description": "Manage routes, vehicle assignments and crew"
+      },
+      {
+        "name": "maintenance",
+        "description": "Manage maintenance records"
+      },
+      {
+        "name": "loading_team",
+        "description": "Manage cargo loading and custody"
+      },
+      {
+        "name": "on_board_staff",
+        "description": "On-board operations"
+      },
+      {
+        "name": "analytics",
+        "description": "Read-only analytics access"
+      },
+      {
+        "name": "sysadmin",
+        "description": "System administration (no domain PII)"
+      },
+      {
+        "name": "crew",
+        "description": "Flight crew self-service (own trips and fatigue)"
+      }
     ]
   },
   "users": [
@@ -67,9 +95,20 @@
       "firstName": "Admin",
       "lastName": "User",
       "credentials": [
-        { "type": "password", "value": "admin", "temporary": false }
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["asset_manager", "account_manager", "trip_manager", "sysadmin"]
+      "realmRoles": [
+        "asset_manager",
+        "account_manager",
+        "route_manager",
+        "sysadmin",
+        "maintenance",
+        "crew"
+      ]
     },
     {
       "username": "tripmgr",
@@ -78,9 +117,15 @@
       "firstName": "Trip",
       "lastName": "Manager",
       "credentials": [
-        { "type": "password", "value": "tripmgr", "temporary": false }
+        {
+          "type": "password",
+          "value": "tripmgr",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["trip_manager"]
+      "realmRoles": [
+        "route_manager"
+      ]
     },
     {
       "username": "loader",
@@ -89,9 +134,15 @@
       "firstName": "Loading",
       "lastName": "Operator",
       "credentials": [
-        { "type": "password", "value": "loader", "temporary": false }
+        {
+          "type": "password",
+          "value": "loader",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["loading_team"]
+      "realmRoles": [
+        "loading_team"
+      ]
     },
     {
       "username": "viewer",
@@ -100,9 +151,66 @@
       "firstName": "Read",
       "lastName": "Only",
       "credentials": [
-        { "type": "password", "value": "viewer", "temporary": false }
+        {
+          "type": "password",
+          "value": "viewer",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["analytics"]
+      "realmRoles": [
+        "analytics"
+      ]
+    },
+    {
+      "username": "maintmgr",
+      "enabled": true,
+      "email": "maintmgr@assetic.local",
+      "firstName": "Maintenance",
+      "lastName": "Manager",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "maintmgr",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "maintenance"
+      ]
+    },
+    {
+      "username": "m.captain-0004",
+      "enabled": true,
+      "email": "m.captain-0004@assetic.local",
+      "firstName": "Captain",
+      "lastName": "Demo",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "m.captain-0004",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "crew"
+      ]
+    },
+    {
+      "username": "o.route_manager-0002",
+      "enabled": true,
+      "email": "o.route_manager-0002@assetic.local",
+      "firstName": "Route",
+      "lastName": "Manager",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "o.route_manager-0002",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "route_manager"
+      ]
     }
   ]
 }

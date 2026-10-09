@@ -80,7 +80,7 @@ describe("UI auth: getUser", () => {
       sub: "user-123",
       preferred_username: "tripmgr",
       email: "tripmgr@assetic.local",
-      realm_access: { roles: ["trip_manager", "default-roles-assetic"] },
+      realm_access: { roles: ["route_manager", "default-roles-assetic"] },
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
     sessionStorage.setItem("assetic_token", token);
@@ -89,6 +89,6 @@ describe("UI auth: getUser", () => {
     expect(user!.username).toBe("tripmgr");
     expect(user!.sub).toBe("user-123");
     expect(user!.email).toBe("tripmgr@assetic.local");
-    expect(user!.roles).toContain("trip_manager");
+    expect(user!.roles).toContain("route_manager");
   });
 });

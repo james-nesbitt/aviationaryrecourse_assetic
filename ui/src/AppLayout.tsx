@@ -2,8 +2,16 @@ import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getUser, logout } from "./lib/auth.js";
 
-const navItems = [
+/**
+ * Role-gated navigation. Role sections appear for the Keycloak roles that own
+ * them; the shared domain lists stay visible to every authenticated user.
+ * Gating is additive, so an admin holding every role sees every section.
+ */
+const navItems: { to: string; label: string; end?: boolean; role?: string }[] = [
   { to: "/", label: "Dashboard", end: true },
+  { to: "/fleet", label: "Fleet & Maintenance", role: "maintenance" },
+  { to: "/operations", label: "Operations Control", role: "route_manager" },
+  { to: "/my-trips", label: "My Schedule", role: "crew" },
   { to: "/vehicles", label: "Vehicles" },
   { to: "/operators", label: "Operators" },
   { to: "/orders", label: "Orders" },
@@ -13,6 +21,10 @@ const navItems = [
   { to: "/customers", label: "Customers" },
   { to: "/passengers", label: "Passengers" },
 ];
+
+export function visibleNavItems(roles: string[]): typeof navItems {
+  return navItems.filter((item) => !item.role || roles.includes(item.role));
+}
 
 export function AppLayout(): React.ReactElement {
   const user = getUser();
@@ -36,7 +48,7 @@ export function AppLayout(): React.ReactElement {
       >
         <div style={{ padding: "0 1rem 1rem", fontSize: "1.5rem", fontWeight: 700 }}>assetic</div>
         <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {navItems.map((item) => (
+          {visibleNavItems(user?.roles ?? []).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

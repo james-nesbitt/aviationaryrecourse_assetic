@@ -35,7 +35,7 @@ export function StaffView(): React.ReactElement {
     <div>
       <h1 style={{ marginTop: 0 }}>Staff ({staff.length})</h1>
       <div style={{ marginBottom: 16 }}>
-        {["", "captain", "first_officer", "cabin_crew", "maintenance_tech", "trip_manager", "account_manager"].map((r) => (
+        {["", "captain", "first_officer", "cabin_crew", "maintenance_tech", "route_manager", "account_manager"].map((r) => (
           <button
             key={r}
             onClick={() => setRoleFilter(r)}

@@ -13,6 +13,14 @@ import { StaffView } from "./views/StaffView.js";
 import { CustomersView } from "./views/CustomersView.js";
 import { PassengersView } from "./views/PassengersView.js";
 import { DashboardView } from "./views/DashboardView.js";
+import { FleetView } from "./views/fleet/FleetView.js";
+import { VehicleDetailPage } from "./views/fleet/VehicleDetailPage.js";
+import { MaintenanceDetailPage } from "./views/fleet/MaintenanceDetailPage.js";
+import { OperationsView } from "./views/operations/OperationsView.js";
+import { RouteDetailPage } from "./views/operations/RouteDetailPage.js";
+import { TripDetailPage } from "./views/operations/TripDetailPage.js";
+import { MyTripsView } from "./views/crew/MyTripsView.js";
+import { StaffDetailPage } from "./views/crew/StaffDetailPage.js";
 import { isLoggedIn } from "./lib/auth.js";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }): React.ReactElement {
@@ -43,6 +51,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="staff" element={<StaffView />} />
           <Route path="customers" element={<CustomersView />} />
           <Route path="passengers" element={<PassengersView />} />
+          <Route path="fleet" element={<FleetView />} />
+          <Route path="vehicles/:id" element={<VehicleDetailPage />} />
+          <Route path="vehicles/:id/maintenance/:mid" element={<MaintenanceDetailPage />} />
+          <Route path="operations" element={<OperationsView />} />
+          <Route path="routes/:id" element={<RouteDetailPage />} />
+          <Route path="trips/:id" element={<TripDetailPage />} />
+          <Route path="my-trips" element={<MyTripsView />} />
+          <Route path="staff/:id" element={<StaffDetailPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

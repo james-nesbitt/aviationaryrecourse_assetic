@@ -10,7 +10,7 @@ interface Order {
   destination_iata: string;
   ordered_on: string;
   status: string;
-  trip_manager_id: string | null;
+  route_manager_id: string | null;
   passenger_group: { group_name: string; pax_count: number } | null;
   freight: { weight_kg: number; cargo_type: string } | null;
   customer?: { company_name: string };
