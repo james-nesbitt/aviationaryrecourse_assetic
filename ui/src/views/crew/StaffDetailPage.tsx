@@ -44,8 +44,10 @@ export function StaffDetailPage(): React.ReactElement {
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!staff) return <div>Loading…</div>;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming = staff.assignments.filter((a) => a.operating_date.slice(0, 10) >= today);
+  // Trip status is anchor-relative; using it avoids depending on the wall clock.
+  const upcoming = staff.assignments.filter(
+    (a) => a.status === "scheduled" || a.status === "in_progress",
+  );
 
   return (
     <div>

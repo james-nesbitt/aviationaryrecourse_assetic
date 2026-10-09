@@ -32,6 +32,20 @@ describe("role-gated navigation", () => {
     expect(labels).toContain("My Schedule");
   });
 
+  it("shows every section to an asset_manager admin without persona roles", () => {
+    const labels = visibleNavItems(["asset_manager"]).map((i) => i.label);
+    expect(labels).toContain("Fleet & Maintenance");
+    expect(labels).toContain("Operations Control");
+    expect(labels).toContain("My Schedule");
+  });
+
+  it("shows every section to a sysadmin without persona roles", () => {
+    const labels = visibleNavItems(["sysadmin"]).map((i) => i.label);
+    expect(labels).toContain("Fleet & Maintenance");
+    expect(labels).toContain("Operations Control");
+    expect(labels).toContain("My Schedule");
+  });
+
   it("keeps the shared domain lists visible without any role", () => {
     const labels = visibleNavItems([]).map((i) => i.label);
     expect(labels).toContain("Vehicles");

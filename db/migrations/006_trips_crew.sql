@@ -56,12 +56,25 @@ CREATE INDEX idx_crew_assignment_trip  ON crew_assignment (trip_id);
 CREATE INDEX idx_crew_assignment_staff ON crew_assignment (staff_id);
 
 -- ============================================================================
+-- Dataset anchor
+-- ============================================================================
+-- Datagen writes generated_at = anchor on every row it produces. The anchor
+-- is read from operator because the API never inserts operators: trips and
+-- crew assignments created through route/crew writes carry the server date,
+-- which would otherwise drag the anchor to "today" and make every
+-- anchor-relative metric read as idle.
+
+CREATE VIEW dataset_anchor_v AS
+SELECT max(generated_at) AS anchor_date,
+       max(generated_at) + TIME '12:00' AS anchor_at
+FROM operator;
+
+-- ============================================================================
 -- Crew fatigue: derived, never stored
 -- ============================================================================
--- Metrics per staff member, relative to the dataset anchor (datagen writes
--- generated_at = anchor on every row, so max(generated_at) is the anchor
--- date; the anchor instant is that date at 12:00, matching
--- assetic_datagen.rng.anchor_instant).
+-- Metrics per staff member, relative to the dataset anchor (see above); the
+-- anchor instant is that date at 12:00, matching
+-- assetic_datagen.rng.anchor_instant.
 --
 --   duty_hours_7d          sum over trips in the trailing 7 days of
 --                          (last arrival - first departure) + 2h pre/post
@@ -75,9 +88,7 @@ CREATE INDEX idx_crew_assignment_staff ON crew_assignment (staff_id);
 
 CREATE VIEW crew_fatigue_v AS
 WITH anchor AS (
-    SELECT max(generated_at) AS anchor_date,
-           max(generated_at) + TIME '12:00' AS anchor_at
-    FROM trip
+    SELECT anchor_date, anchor_at FROM dataset_anchor_v
 ),
 duty AS (
     SELECT ca.staff_id,
@@ -127,9 +138,9 @@ SELECT s.staff_id,
        s.role_class,
        s.operator_id,
        s.keycloak_username,
-       COALESCE(w.duty_hours_7d, 0)::numeric(10,2)      AS duty_hours_7d,
+       round(COALESCE(w.duty_hours_7d, 0)::numeric, 2)::float8  AS duty_hours_7d,
        COALESCE(cr.consecutive_duty_days, 0)::int       AS consecutive_duty_days,
-       r.rest_since_last_hours::numeric(10,2)           AS rest_since_last_hours,
+       round(r.rest_since_last_hours::numeric, 2)::float8       AS rest_since_last_hours,
        CASE
            WHEN COALESCE(w.duty_hours_7d, 0) > 55
              OR COALESCE(cr.consecutive_duty_days, 0) > 6
@@ -195,4 +206,4 @@ ORDER BY p.passenger_id, te.sequence DESC NULLS LAST;
 -- ============================================================================
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON trip, crew_assignment TO assetic_app;
-GRANT SELECT ON crew_fatigue_v, cargo_state, passenger_state TO assetic_app;
+GRANT SELECT ON crew_fatigue_v, dataset_anchor_v, cargo_state, passenger_state TO assetic_app;

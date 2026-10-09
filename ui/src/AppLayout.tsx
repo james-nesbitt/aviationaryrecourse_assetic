@@ -5,8 +5,13 @@ import { getUser, logout } from "./lib/auth.js";
 /**
  * Role-gated navigation. Role sections appear for the Keycloak roles that own
  * them; the shared domain lists stay visible to every authenticated user.
- * Gating is additive, so an admin holding every role sees every section.
+ *
+ * Platform-administrator roles see every section without needing each
+ * persona role mapped individually, so an operator-wide admin can inspect
+ * the maintenance, operations and crew surfaces directly.
  */
+const ADMIN_ROLES = ["asset_manager", "sysadmin"];
+
 const navItems: { to: string; label: string; end?: boolean; role?: string }[] = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/fleet", label: "Fleet & Maintenance", role: "maintenance" },
@@ -23,7 +28,8 @@ const navItems: { to: string; label: string; end?: boolean; role?: string }[] = 
 ];
 
 export function visibleNavItems(roles: string[]): typeof navItems {
-  return navItems.filter((item) => !item.role || roles.includes(item.role));
+  const isAdmin = roles.some((r) => ADMIN_ROLES.includes(r));
+  return navItems.filter((item) => !item.role || isAdmin || roles.includes(item.role));
 }
 
 export function AppLayout(): React.ReactElement {

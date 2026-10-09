@@ -222,7 +222,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
                        (legs -> (jsonb_array_length(legs) - 1) ->> 'scheduled_arrival')::timestamp
                        - (legs -> 0 ->> 'scheduled_departure')::timestamp
                      )) / 3600.0
-                   )::numeric, 1) AS block_hours
+                   )::numeric, 1)::float8 AS block_hours
             FROM trip WHERE vehicle_id = ${id}
             GROUP BY 1 ORDER BY 1
           `,
@@ -355,8 +355,8 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
           prisma.$queryRaw`
             SELECT operating_date, status, count(*)::int AS trips
             FROM trip
-            WHERE operating_date >= (SELECT max(generated_at) FROM trip) - ${days}::int
-              AND operating_date <= (SELECT max(generated_at) FROM trip) + 14
+            WHERE operating_date >= (SELECT anchor_date FROM dataset_anchor_v) - ${days}::int
+              AND operating_date <= (SELECT anchor_date FROM dataset_anchor_v) + 14
             GROUP BY 1, 2 ORDER BY 1, 2
           `,
           prisma.$queryRaw`
@@ -385,15 +385,15 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
         const [levels, byRole] = await Promise.all([
           prisma.$queryRaw`
             SELECT level, count(*)::int AS crew,
-                   round(avg(duty_hours_7d), 1) AS avg_duty_hours
+                   round(avg(duty_hours_7d)::numeric, 1)::float8 AS avg_duty_hours
             FROM crew_fatigue_v
             WHERE (${query.operatorId ?? null}::text IS NULL OR operator_id = ${query.operatorId ?? null})
             GROUP BY 1 ORDER BY 1
           `,
           prisma.$queryRaw`
             SELECT role, count(*)::int AS crew,
-                   round(avg(duty_hours_7d), 1) AS avg_duty_hours,
-                   max(duty_hours_7d) AS max_duty_hours
+                   round(avg(duty_hours_7d)::numeric, 1)::float8 AS avg_duty_hours,
+                   max(duty_hours_7d)::float8 AS max_duty_hours
             FROM crew_fatigue_v
             WHERE (${query.operatorId ?? null}::text IS NULL OR operator_id = ${query.operatorId ?? null})
             GROUP BY 1 ORDER BY 1

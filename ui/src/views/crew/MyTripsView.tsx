@@ -52,9 +52,11 @@ export function MyTripsView(): React.ReactElement {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const past = assignments.filter((a) => a.operating_date.slice(0, 10) < today).reverse();
-  const upcoming = assignments.filter((a) => a.operating_date.slice(0, 10) >= today);
+  // Split on trip status, not the wall clock: trip status is derived from the
+  // dataset anchor, so a demo dataset dated in the past still shows a
+  // meaningful forward schedule.
+  const past = assignments.filter((a) => a.status === "completed" || a.status === "cancelled").reverse();
+  const upcoming = assignments.filter((a) => a.status === "scheduled" || a.status === "in_progress");
 
   return (
     <div>
