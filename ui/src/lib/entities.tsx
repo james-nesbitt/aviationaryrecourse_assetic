@@ -37,6 +37,8 @@ export interface EntitySpec {
   entityKey?: import("./permissions.js").EntityKey;
   /** Which operations the API offers for this entity (mirrors lib/permissions DOMAIN). */
   crud?: { create?: boolean; update?: boolean; delete?: boolean };
+  /** True for subordinate records (crew/route assignments): no :id routes of their own. */
+  subordinate?: boolean;
   /** Editable fields for the generic form; mirrors the API's updateFields. */
   formFields?: { key: string; label: string; type?: "text" | "number" | "date" | "select"; options?: string[]; required?: boolean }[];
   expansion: (row: Row) => { label: string; value: React.ReactNode }[];

@@ -71,8 +71,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route key={e.key} path={e.path.slice(1)} element={<EntityListPage />} />
           ))}
 
-          {/* Edit routes: generic form per entity, from the registry. */}
-          {ENTITIES.map((e) => (
+          {/* Edit routes: generic form per entity. Subordinate records
+              (crew/route assignments) have no form and no :id route of their own. */}
+          {ENTITIES.filter((e) => !e.subordinate).map((e) => (
             <Route
               key={`${e.key}-edit`}
               path={`${e.path.slice(1)}/:id/edit`}
@@ -80,8 +81,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             />
           ))}
 
-          {/* Detail routes: bespoke dashboard where one exists, else generic. */}
-          {ENTITIES.map((e) => (
+          {/* Detail routes: bespoke dashboard where one exists, else generic.
+              Subordinate records route their rows to the parent entity instead. */}
+          {ENTITIES.filter((e) => !e.subordinate).map((e) => (
             <Route
               key={`${e.key}-detail`}
               path={`${e.path.slice(1)}/:id`}
