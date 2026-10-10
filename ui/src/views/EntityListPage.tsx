@@ -23,6 +23,10 @@ export function EntityListPage(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  /** Cursor tokens of the pages BEFORE the current one; index 0 is page one. */
+  const [pageStack, setPageStack] = useState<string[]>([]);
+  /** Token for the NEXT page, null on the last page. */
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<{ roles?: string[] }>("/api/me")
@@ -30,26 +34,43 @@ export function EntityListPage(): React.ReactElement {
       .catch(() => setRoles([]));
   }, []);
 
+  const after = pageStack.length > 0 ? pageStack[pageStack.length - 1] : null;
+
   useEffect(() => {
     if (!spec) return;
     setLoading(true);
-    const query = Object.entries(filter)
-      .filter(([, v]) => v)
-      .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-      .join("&");
-    apiGet<Row[]>(`${spec.endpoint}${query ? `?${query}` : ""}`)
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filter)) if (v) params.set(k, v);
+    if (after) params.set("after", after);
+    apiGet<{ rows: Row[]; next_cursor: string | null }>(`${spec.endpoint}?${params.toString()}`)
       .then((data) => {
-        setRows(data);
+        setRows(data.rows);
+        setNextCursor(data.next_cursor);
         setError(null);
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [spec, filter]);
+  }, [spec, filter, after]);
+
+  const changeFilter = (next: Record<string, string>): void => {
+    setPageStack([]);
+    setFilter(next);
+  };
+
+  const goNext = (): void => {
+    if (!nextCursor) return;
+    setPageStack((prev) => [...prev, nextCursor]);
+  };
+
+  const goPrev = (): void => {
+    if (pageStack.length === 0) return;
+    setPageStack((prev) => prev.slice(0, -1));
+  };
 
   if (!spec) return <EmptyState message={`No entity registered for ${pathname}`} />;
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
 
-  const shown = spec.limit ? rows.slice(0, spec.limit) : rows;
+  const shown = rows;
 
   const rowId = (row: Row): string => {
     if (spec.idField && row[spec.idField] != null) return String(row[spec.idField]);
@@ -79,7 +100,7 @@ export function EntityListPage(): React.ReactElement {
             {f.label}{" "}
             <select
               value={filter[f.param] ?? ""}
-              onChange={(e) => setFilter({ ...filter, [f.param]: e.target.value })}
+              onChange={(e) => changeFilter({ ...filter, [f.param]: e.target.value })}
             >
               <option value="">all</option>
               {f.options.map((o) => (
@@ -104,7 +125,7 @@ export function EntityListPage(): React.ReactElement {
       {notice ? <div style={{ color: "#666", fontSize: "0.85rem", marginBottom: 8 }}>{notice}</div> : null}
 
       <div style={{ color: "#777", fontSize: "0.85rem", marginBottom: 8 }}>
-        {loading ? "Loading…" : `${rows.length} records${shown.length < rows.length ? ` (showing ${shown.length})` : ""}`}
+        {loading ? "Loading…" : `${shown.length} on this page`}
       </div>
 
       <ExpandableTable
@@ -141,6 +162,16 @@ export function EntityListPage(): React.ReactElement {
             : undefined
         }
       />
+
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 12 }}>
+        <button type="button" onClick={goPrev} disabled={pageStack.length === 0 || loading}>
+          ← Previous
+        </button>
+        <span style={{ color: "#777", fontSize: "0.85rem" }}>page {pageStack.length + 1}</span>
+        <button type="button" onClick={goNext} disabled={nextCursor === null || loading}>
+          Next →
+        </button>
+      </div>
     </div>
   );
 }

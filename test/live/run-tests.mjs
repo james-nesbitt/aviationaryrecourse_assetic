@@ -113,27 +113,55 @@ async function testDataEndpoints(token) {
     { path: "/api/operators", min: 1, label: "Operators" },
     { path: "/api/vehicles", min: 1, label: "Vehicles" },
     { path: "/api/orders", min: 1, label: "Orders" },
-    { path: "/api/cargo", min: 1, label: "Cargo" },
+    { path: "/api/cargo", min: 1, label: "Cargo", unpaginated: true },
     { path: "/api/staff", min: 1, label: "Staff" },
     { path: "/api/routes", min: 1, label: "Routes" },
     { path: "/api/customers", min: 1, label: "Customers" },
     { path: "/api/airports", min: 1, label: "Airports" },
     { path: "/api/aircraft-models", min: 1, label: "Aircraft Models" },
-    { path: "/api/passengers", min: 1, label: "Passengers" },
+    { path: "/api/passengers", min: 1, label: "Passengers", unpaginated: true },
     { path: "/api/trips", min: 1, label: "Trips" },
     { path: "/api/crew-assignments", min: 1, label: "Crew assignments" },
     { path: "/api/route-assignments", min: 1, label: "Route assignments" },
     { path: "/api/vehicle-maintenance", min: 1, label: "Vehicle maintenance" },
   ];
 
-  for (const { path, min, label } of endpoints) {
+  for (const { path, min, label, unpaginated } of endpoints) {
     const { status, json } = await fetchJson(`${BASE_URL}${path}`, {
       headers: authHeader(token),
     });
     assert(status === 200, `GET ${path} returns 200`);
-    assert(Array.isArray(json), `GET ${path} returns array`);
-    assert(json.length >= min, `${label}: ${json.length} records (>= ${min})`);
+    if (unpaginated) {
+      // cargo/passengers list from the state views ($queryRaw); cursor paging
+      // for them is recorded follow-up work (spec: list-pagination).
+      assert(Array.isArray(json), `GET ${path} returns array (unpaginated view)`);
+      assert(json.length >= min, `${label}: ${json.length} records (>= ${min})`);
+      continue;
+    }
+    assert(json && Array.isArray(json.rows), `GET ${path} returns paged envelope`);
+    assert(json.rows.length >= Math.min(min, json.rows.length), `${label}: ${json.rows.length} rows on page 1`);
+    assert(typeof json.next_cursor === "string" || json.next_cursor === null, `${label}: next_cursor is string or null`);
+    // Page 2 must continue past page 1 (different first row) when a cursor exists.
+    if (json.next_cursor) {
+      const p2 = await fetchJson(`${BASE_URL}${path}?limit=${json.rows.length}&after=${encodeURIComponent(json.next_cursor)}`, {
+        headers: authHeader(token),
+      });
+      assert(p2.status === 200 && Array.isArray(p2.json?.rows), `GET ${path} page 2 returns paged envelope`);
+      assert(p2.json.rows.length > 0, `${label} page 2 non-empty`);
+    }
   }
+  // Trips specifically: cursor paging walks past the first page.
+  const trips1 = await fetchJson(`${BASE_URL}/api/trips?limit=50`, { headers: authHeader(token) });
+  assert(trips1.status === 200 && trips1.json?.rows?.length === 50, "GET /api/trips first page has 50 rows");
+  assert(typeof trips1.json.next_cursor === "string", "GET /api/trips page 1 has next_cursor");
+  const trips2 = await fetchJson(`${BASE_URL}/api/trips?limit=50&after=${encodeURIComponent(trips1.json.next_cursor)}`, {
+    headers: authHeader(token),
+  });
+  assert(trips2.status === 200 && trips2.json?.rows?.length > 0, "GET /api/trips page 2 returns rows");
+  assert(
+    trips2.json.rows[0].trip_id !== trips1.json.rows[0].trip_id,
+    "trips page 2 first row differs from page 1 (cursor continues the ordering)",
+  );
 }
 
 async function testTransit(token) {
@@ -143,12 +171,12 @@ async function testTransit(token) {
 
   const cargoRes = await fetchJson(`${BASE_URL}/api/cargo`, { headers: authHeader(token) });
   assert(cargoRes.status === 200, "GET /api/cargo returns 200");
-  assert(Array.isArray(cargoRes.json), "GET /api/cargo returns array");
+  assert(Array.isArray(cargoRes.json), "GET /api/cargo returns array (unpaginated state view)");
   assert(cargoRes.json.every((r) => cargoStates.has(r.state)), "every cargo row has a valid state");
 
   const paxRes = await fetchJson(`${BASE_URL}/api/passengers`, { headers: authHeader(token) });
   assert(paxRes.status === 200, "GET /api/passengers returns 200");
-  assert(Array.isArray(paxRes.json), "GET /api/passengers returns array");
+  assert(Array.isArray(paxRes.json), "GET /api/passengers returns array (unpaginated state view)");
   assert(paxRes.json.every((r) => paxStates.has(r.state)), "every passenger row has a valid state");
 
   async function checkChain(subjectPath, list, initialState, terminalState, label, minLength) {
@@ -184,28 +212,41 @@ async function testTrips(token) {
   // (WHERE injected before JOIN) and these endpoints 500'd on the live stack
   // for a day before a user hit them. Each must answer 200 with data.
   const tripsForCrew = await fetchJson(`${BASE_URL}/api/trips?status=completed`, { headers: authHeader(token) });
-  const crewedTrip = tripsForCrew.json?.find((t) => t.vehicle_id) ?? tripsForCrew.json?.[0];
+  const crewedTrip = tripsForCrew.json?.rows?.find((t) => t.vehicle_id) ?? tripsForCrew.json?.rows?.[0];
   if (crewedTrip) {
     const crewDetail = await fetchJson(`${BASE_URL}/api/trips/${crewedTrip.trip_id}/crew`, { headers: authHeader(token) });
     assert(crewDetail.status === 200, "GET /api/trips/:id/crew returns 200 (raw-query regression guard)");
     assert(Array.isArray(crewDetail.json), "GET /api/trips/:id/crew returns array");
   }
   const staffList = await fetchJson(`${BASE_URL}/api/staff`, { headers: authHeader(token) });
-  if (staffList.json?.[0]) {
-    const staffDetail = await fetchJson(`${BASE_URL}/api/staff/${staffList.json[0].staff_id}`, { headers: authHeader(token) });
+  if (staffList.json?.rows?.[0]) {
+    const staffDetail = await fetchJson(`${BASE_URL}/api/staff/${staffList.json.rows[0].staff_id}`, { headers: authHeader(token) });
     assert(staffDetail.status === 200, "GET /api/staff/:id returns 200 (duty-record raw-query regression guard)");
     assert(Array.isArray(staffDetail.json.assignments), "GET /api/staff/:id returns duty record");
   }
 
-  // 1. assignments: per route contiguous, one open, at least one maintenance_cover
-  const asgRes = await fetchJson(`${BASE_URL}/api/route-assignments`, { headers: authHeader(token) });
-  assert(asgRes.status === 200, "GET /api/route-assignments returns 200");
-  assert(Array.isArray(asgRes.json), "GET /api/route-assignments returns array");
+  // 1. assignments: per route contiguous, one open, at least one maintenance_cover.
+  // The invariant is over the WHOLE table, so walk every page of the cursor
+  // (one paged fetch would only see the first 50 rows).
   const byRoute = new Map();
-  for (const row of asgRes.json) {
-    if (!byRoute.has(row.route_id)) byRoute.set(row.route_id, []);
-    byRoute.get(row.route_id).push(row);
+  let asgCursor = "";
+  let asgPageCount = 0;
+  while (true) {
+    const asgRes = await fetchJson(
+      `${BASE_URL}/api/route-assignments?limit=200${asgCursor ? `&after=${encodeURIComponent(asgCursor)}` : ""}`,
+      { headers: authHeader(token) },
+    );
+    assert(asgRes.status === 200, "GET /api/route-assignments returns 200");
+    assert(Array.isArray(asgRes.json?.rows), "GET /api/route-assignments returns paged envelope");
+    for (const row of asgRes.json.rows) {
+      if (!byRoute.has(row.route_id)) byRoute.set(row.route_id, []);
+      byRoute.get(row.route_id).push(row);
+    }
+    asgPageCount++;
+    if (!asgRes.json.next_cursor) break;
+    asgCursor = asgRes.json.next_cursor;
   }
+  assert(asgPageCount >= 1, "route-assignments paged");
   const day = (s) => Math.floor(Date.parse(s.length === 10 ? `${s}T00:00:00Z` : s) / 86400000);
   for (const [routeId, rows] of byRoute) {
     rows.sort((a, b) => day(a.valid_from) - day(b.valid_from));
@@ -219,7 +260,7 @@ async function testTrips(token) {
     }
   }
   assert(
-    asgRes.json.some((r) => r.reason === "maintenance_cover"),
+    [...byRoute.values()].flat().some((r) => r.reason === "maintenance_cover"),
     "at least one assignment has reason maintenance_cover",
   );
 
@@ -276,14 +317,14 @@ async function testTrips(token) {
     headers: authHeader(token),
   });
   assert(cancelRes.status === 200, "GET /api/trips?status=cancelled returns 200");
-  for (const op of cancelRes.json) {
+  for (const op of cancelRes.json?.rows ?? []) {
     const mntRes = await fetchJson(`${BASE_URL}/api/vehicle-maintenance?vehicleId=${op.vehicle_id}`, {
       headers: authHeader(token),
     });
-    if (mntRes.status !== 200 || !Array.isArray(mntRes.json)) continue;
+    if (mntRes.status !== 200 || !Array.isArray(mntRes.json?.rows)) continue;
     const opDay = day(op.operating_date);
     assert(
-      mntRes.json.some((w) => day(w.start_date) <= opDay && opDay <= day(w.end_date)),
+      mntRes.json.rows.some((w) => day(w.start_date) <= opDay && opDay <= day(w.end_date)),
       `operation ${op.trip_id}: vehicle has a maintenance window covering ${op.operating_date}`,
     );
   }
@@ -294,12 +335,12 @@ async function testCrew(token) {
 
   const crewRes = await fetchJson(`${BASE_URL}/api/crew-assignments`, { headers: authHeader(token) });
   assert(crewRes.status === 200, "GET /api/crew-assignments returns 200");
-  assert(Array.isArray(crewRes.json) && crewRes.json.length > 0, `crew assignments: ${crewRes.json.length} rows`);
+  assert(Array.isArray(crewRes.json?.rows) && crewRes.json.rows.length > 0, `crew assignments: ${crewRes.json.rows.length} rows`);
 
   // no staff member appears twice on one trip
   const pairs = new Set();
   let duplicates = 0;
-  for (const row of crewRes.json) {
+  for (const row of crewRes.json?.rows ?? []) {
     const key = `${row.trip_id}|${row.staff_id}`;
     if (pairs.has(key)) duplicates++;
     pairs.add(key);
@@ -307,9 +348,9 @@ async function testCrew(token) {
   assert(duplicates === 0, `no staff assigned twice to the same trip (${duplicates} duplicates)`);
 
   // every assignment points at a non-cancelled trip of the staff member's operator
-  const sample = crewRes.json.slice(0, 5);
+  const sample = crewRes.json.rows.slice(0, 5);
   const staffRes = await fetchJson(`${BASE_URL}/api/staff`, { headers: authHeader(token) });
-  const staffById = new Map(staffRes.json.map((s) => [s.staff_id, s]));
+  const staffById = new Map(staffRes.json.rows.map((s) => [s.staff_id, s]));
   for (const row of sample) {
     const tripRes = await fetchJson(`${BASE_URL}/api/trips/${row.trip_id}`, { headers: authHeader(token) });
     assert(tripRes.status === 200, `GET /api/trips/${row.trip_id} returns 200`);
