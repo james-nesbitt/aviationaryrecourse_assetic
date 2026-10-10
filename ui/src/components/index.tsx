@@ -191,17 +191,22 @@ export function DataTable<T>({
   columns,
   rowKey,
   empty = "No records",
+  expansion,
 }: {
   rows: T[];
   columns: Column<T>[];
   rowKey: (row: T) => string;
   empty?: string;
+  /** Optional summary view: click a row to expand it into a FieldGrid. */
+  expansion?: (row: T) => { label: string; value: React.ReactNode }[];
 }): React.ReactElement {
+  const [expanded, setExpanded] = React.useState<string | null>(null);
   if (rows.length === 0) return <EmptyState message={empty} />;
   return (
     <table style={{ borderCollapse: "collapse", width: "100%" }}>
       <thead>
         <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd", color: "#555" }}>
+          {expansion ? <th aria-label="expand" /> : null}
           {columns.map((c) => (
             <th key={c.key} style={{ padding: "8px 12px", fontSize: "0.85rem" }}>
               {c.header}
@@ -210,15 +215,36 @@ export function DataTable<T>({
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => (
-          <tr key={rowKey(row)} style={{ borderBottom: "1px solid #eee" }}>
-            {columns.map((c) => (
-              <td key={c.key} style={{ padding: "8px 12px", fontSize: "0.9rem" }}>
-                {c.render(row)}
-              </td>
-            ))}
-          </tr>
-        ))}
+        {rows.map((row) => {
+          const key = rowKey(row);
+          const isOpen = expanded === key;
+          return (
+            <React.Fragment key={key}>
+              <tr
+                style={{ borderBottom: "1px solid #eee", cursor: expansion ? "pointer" : undefined }}
+                onClick={expansion ? () => setExpanded(isOpen ? null : key) : undefined}
+              >
+                {expansion ? (
+                  <td style={{ padding: "8px 12px", color: "#888" }} aria-label={isOpen ? "collapse" : "expand"}>
+                    {isOpen ? "▾" : "▸"}
+                  </td>
+                ) : null}
+                {columns.map((c) => (
+                  <td key={c.key} style={{ padding: "8px 12px", fontSize: "0.9rem" }}>
+                    {c.render(row)}
+                  </td>
+                ))}
+              </tr>
+              {isOpen && expansion ? (
+                <tr>
+                  <td colSpan={columns.length + 1} style={{ padding: "12px 16px", background: "#f9f9f9" }}>
+                    <FieldGrid fields={expansion(row)} />
+                  </td>
+                </tr>
+              ) : null}
+            </React.Fragment>
+          );
+        })}
       </tbody>
     </table>
   );

@@ -173,9 +173,9 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     return prisma.$queryRaw`
       SELECT ca.assignment_id, ca.trip_id, ca.crew_role,
              s.staff_id, s.given_name, s.family_name, s.role, s.base_iata
-      FROM crew_assignment ca WHERE ca.deleted_at IS NULL
+      FROM crew_assignment ca
       JOIN staff s ON s.staff_id = ca.staff_id
-      WHERE ca.trip_id = ${id}
+      WHERE ca.deleted_at IS NULL AND ca.trip_id = ${id}
       ORDER BY ca.crew_role, s.staff_id
     `;
   });
@@ -354,9 +354,9 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
       prisma.$queryRaw`
         SELECT ca.assignment_id, ca.crew_role, t.trip_id, t.route_id,
                t.operating_date, t.status, t.vehicle_id, t.legs
-        FROM crew_assignment ca WHERE ca.deleted_at IS NULL
+        FROM crew_assignment ca
         JOIN trip t ON t.trip_id = ca.trip_id AND t.deleted_at IS NULL
-        WHERE ca.staff_id = ${id}
+        WHERE ca.deleted_at IS NULL AND ca.staff_id = ${id}
         ORDER BY t.operating_date DESC
       `,
       prisma.$queryRaw`SELECT * FROM crew_fatigue_v WHERE staff_id = ${id}`,
@@ -734,8 +734,10 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
     const crewed = await prisma.$queryRaw<{ count: bigint }[]>`
       SELECT count(*) AS count
-      FROM crew_assignment ca WHERE ca.deleted_at IS NULL JOIN trip t ON t.trip_id = ca.trip_id AND t.deleted_at IS NULL
-      WHERE t.route_id = ${id} AND t.operating_date >= ${effective}
+      FROM crew_assignment ca
+      JOIN trip t ON t.trip_id = ca.trip_id AND t.deleted_at IS NULL
+      WHERE ca.deleted_at IS NULL
+        AND t.route_id = ${id} AND t.operating_date >= ${effective}
     `;
     if (Number(crewed[0]?.count ?? 0) > 0) {
       reply.code(409);

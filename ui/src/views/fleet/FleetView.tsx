@@ -120,6 +120,14 @@ export function FleetView(): React.ReactElement {
             { key: "veh", header: "Vehicles", render: (l) => l.vehicles },
           ]}
           empty="No recorded activity"
+          expansion={(l) => [
+            { label: "IATA", value: l.iata },
+            { label: "Country", value: l.country },
+            { label: "Cargo on the ground", value: l.cargo },
+            { label: "Passengers in transit via", value: l.passengers },
+            { label: "Vehicles based here", value: l.vehicles },
+            { label: "Detail", value: <Link to={`/airports/${l.iata}`}>Open airport dashboard</Link> },
+          ]}
         />
       </Section>
 
@@ -146,6 +154,15 @@ export function FleetView(): React.ReactElement {
               render: (v) => <Link to={`/operators/${v.operator_id}`}>{v.operator_id}</Link>,
             },
             { key: "status", header: "Status", render: (v) => <Badge value={v.status ?? "unknown"} /> },
+          ]}
+          expansion={(v) => [
+            { label: "Vehicle id", value: v.vehicle_id },
+            { label: "Registration", value: v.registration ?? "—" },
+            { label: "Kind", value: v.kind },
+            { label: "Model", value: v.model_id ?? "—" },
+            { label: "Operator", value: v.operator_id },
+            { label: "Base", value: v.base_iata },
+            { label: "Detail", value: <Link to={`/vehicles/${v.vehicle_id}`}>Open vehicle detail</Link> },
           ]}
         />
       </Section>
