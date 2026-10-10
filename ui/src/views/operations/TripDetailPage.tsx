@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiSend, type CrewMember, type FatigueRow, type Trip } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, EmptyState, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime, formatHours, legChain, tripHours } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
@@ -84,7 +84,7 @@ export function TripDetailPage(): React.ReactElement {
         subtitle={`${formatDate(trip.operating_date)} · vehicle ${trip.vehicle_id} · route ${trip.route_id}`}
         backTo={`/routes/${trip.route_id}`}
         backLabel="Route"
-        editTo={canWrite(roles, "trips", "update") ? `/trips/${id}/edit` : undefined}
+        editTo={canWrite(roles, "trips", "update") && hasEditForm("trips") ? `/trips/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "trips", "delete")
             ? () => {

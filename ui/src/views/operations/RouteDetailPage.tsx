@@ -8,7 +8,7 @@ import {
   type Trip,
   type TripLeg,
 } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline } from "../../components/index.jsx";
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
@@ -108,7 +108,7 @@ export function RouteDetailPage(): React.ReactElement {
         subtitle={`${route.route_type} · every ${route.frequency_days}d from ${formatDate(route.first_operating_date)} · ${route.operator_id}`}
         backTo="/operations"
         backLabel="Operations"
-        editTo={canWrite(roles, "routes", "update") ? `/routes/${id}/edit` : undefined}
+        editTo={canWrite(roles, "routes", "update") && hasEditForm("routes") ? `/routes/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "routes", "delete")
             ? () => {

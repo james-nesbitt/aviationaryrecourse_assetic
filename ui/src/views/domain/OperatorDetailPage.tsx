@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard } from "../../components/index.jsx";
 import { DonutBreakdown } from "../../charts/index.jsx";
 
@@ -90,7 +90,7 @@ export function OperatorDetailPage(): React.ReactElement {
         subtitle={`${operator.type} operator · hub ${operator.hub_iata} · ${operator.country} · founded ${operator.founded_year}`}
         backTo="/operators"
         backLabel="Operators"
-        editTo={canWrite(roles, "operators", "update") ? `/operators/${id}/edit` : undefined}
+        editTo={canWrite(roles, "operators", "update") && hasEditForm("operators") ? `/operators/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "operators", "delete")
             ? () => {

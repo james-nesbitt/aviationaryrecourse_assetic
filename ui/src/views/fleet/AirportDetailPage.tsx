@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section } from "../../components/index.jsx";
 import { formatDate, formatDateTime } from "../../lib/format.js";
 
@@ -99,7 +99,7 @@ export function AirportDetailPage(): React.ReactElement {
         subtitle={`${airport.city}, ${airport.country}`}
         backTo="/airports"
         backLabel="Airports"
-        editTo={canWrite(roles, "airports", "update") ? `/airports/${id}/edit` : undefined}
+        editTo={canWrite(roles, "airports", "update") && hasEditForm("airports") ? `/airports/${id}/edit` : undefined}
       />
 
       <DetailTabs

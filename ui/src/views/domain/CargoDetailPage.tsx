@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, type Trip } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 
@@ -67,7 +67,7 @@ export function CargoDetailPage(): React.ReactElement {
         subtitle={`${cargo.cargo_type} · ${cargo.weight_kg} kg · ${cargo.operator_name}`}
         backTo="/cargo"
         backLabel="Cargo"
-        editTo={canWrite(roles, "cargo", "update") ? `/cargo/${id}/edit` : undefined}
+        editTo={canWrite(roles, "cargo", "update") && hasEditForm("cargo") ? `/cargo/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "cargo", "delete")
             ? () => {

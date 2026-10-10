@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, type Trip } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 
@@ -73,7 +73,7 @@ export function PassengerDetailPage(): React.ReactElement {
         subtitle={`${passenger.origin_iata} → ${passenger.destination_iata} · ${passenger.passenger_type} · ${passenger.operator_name}`}
         backTo="/passengers"
         backLabel="Passengers"
-        editTo={canWrite(roles, "passengers", "update") ? `/passengers/${id}/edit` : undefined}
+        editTo={canWrite(roles, "passengers", "update") && hasEditForm("passengers") ? `/passengers/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "passengers", "delete")
             ? () => {

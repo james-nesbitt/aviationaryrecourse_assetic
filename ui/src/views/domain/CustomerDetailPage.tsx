@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate } from "../../lib/format.js";
 
@@ -62,7 +62,7 @@ export function CustomerDetailPage(): React.ReactElement {
         subtitle={`${customer.customer_type} · ${customer.operator_id}`}
         backTo="/customers"
         backLabel="Customers"
-        editTo={canWrite(roles, "customers", "update") ? `/customers/${id}/edit` : undefined}
+        editTo={canWrite(roles, "customers", "update") && hasEditForm("customers") ? `/customers/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "customers", "delete")
             ? () => {

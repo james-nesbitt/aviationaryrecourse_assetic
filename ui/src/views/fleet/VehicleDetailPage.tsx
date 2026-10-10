@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, type MaintenanceWindow, type Trip } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline } from "../../components/index.jsx";
 import { BarStack, LineTrend } from "../../charts/index.jsx";
 import { formatDate, legChain } from "../../lib/format.js";
@@ -80,7 +80,7 @@ export function VehicleDetailPage(): React.ReactElement {
         subtitle={`${vehicle.model_id ?? "unknown model"} · base ${vehicle.base_iata ?? "—"} · ${vehicle.operator_id}`}
         backTo="/fleet"
         backLabel="Fleet"
-        editTo={canWrite(roles, "vehicles", "update") ? `/vehicles/${id}/edit` : undefined}
+        editTo={canWrite(roles, "vehicles", "update") && hasEditForm("vehicles") ? `/vehicles/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "vehicles", "delete")
             ? () => {

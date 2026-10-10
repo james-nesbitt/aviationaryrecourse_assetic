@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, type FatigueRow, type TripLeg } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatHours, legChain, tripHours } from "../../lib/format.js";
 
@@ -68,7 +68,7 @@ export function StaffDetailPage(): React.ReactElement {
         subtitle={`${staff.role} · ${staff.role_class} · ${staff.operator_id} · base ${staff.base_iata}`}
         backTo="/staff"
         backLabel="Staff"
-        editTo={canWrite(roles, "staff", "update") ? `/staff/${id}/edit` : undefined}
+        editTo={canWrite(roles, "staff", "update") && hasEditForm("staff") ? `/staff/${id}/edit` : undefined}
         onDelete={
           canWrite(roles, "staff", "delete")
             ? () => {

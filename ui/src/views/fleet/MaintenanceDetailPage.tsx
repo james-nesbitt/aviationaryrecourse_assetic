@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiDelete, apiGet, type MaintenanceWindow, type Trip } from "../../lib/api.js";
-import { canWrite } from "../../lib/permissions.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, EmptyState, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, legChain } from "../../lib/format.js";
 
@@ -56,7 +56,7 @@ export function MaintenanceDetailPage(): React.ReactElement {
         subtitle={`${formatDate(window.start_date)} → ${formatDate(window.end_date)}`}
         backTo={`/vehicles/${id}`}
         backLabel="Vehicle"
-        editTo={canWrite(roles, "vehicle-maintenance", "update") ? `/vehicle-maintenance/${mid}/edit` : undefined}
+        editTo={canWrite(roles, "vehicle-maintenance", "update") && hasEditForm("vehicle-maintenance") ? `/vehicle-maintenance/${mid}/edit` : undefined}
         onDelete={
           canWrite(roles, "vehicle-maintenance", "delete")
             ? () => {

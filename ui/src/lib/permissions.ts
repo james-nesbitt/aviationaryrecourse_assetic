@@ -38,3 +38,20 @@ export function canWrite(roles: string[], entity: EntityKey, op: Operation): boo
   const domainRole = DOMAIN[entity][op];
   return domainRole !== undefined && roles.includes(domainRole);
 }
+
+/**
+ * Whether an edit affordance (Pencil) may render: the role permits update AND
+ * the entity has a generic form (the registry's formFields). Entities whose
+ * updates are bespoke (route regeneration, crew assignment validation) or
+ * absent have no generic form, so their Edit links must not render even when
+ * the API permission table grants update.
+ */
+export function hasEditForm(entity: EntityKey): boolean {
+  return EDITABLE_ENTITIES.has(entity);
+}
+
+/** Entities with a generic edit form (registry formFields + generic CRUD). */
+const EDITABLE_ENTITIES = new Set<EntityKey>([
+  "operators", "vehicles", "vehicle-maintenance", "staff",
+  "customers", "airports", "aircraft-models",
+]);
