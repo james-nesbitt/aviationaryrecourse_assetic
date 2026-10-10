@@ -89,7 +89,7 @@ spec:
               echo "Loading synthetic data..."
               mkdir -p /data
               tar xzf /datagen/data.tar.gz -C /data
-              npx tsx src/scripts/load-jsonl.ts --dir /data 2>&1 || echo "Data load skipped (may already be loaded)"
+              npx tsx src/scripts/load-jsonl.ts --dir /data 2>&1
               echo "Data load complete."
           env:
             - name: DATABASE_URL
