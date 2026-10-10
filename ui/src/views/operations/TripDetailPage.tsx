@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet, apiSend, type CrewMember, type FatigueRow, type Trip } from "../../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet, apiSend, type CrewMember, type FatigueRow, type Trip } from "../../lib/api.js";
+import { canWrite } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, EmptyState, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime, formatHours, legChain, tripHours } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
@@ -32,6 +33,8 @@ export function TripDetailPage(): React.ReactElement {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canEdit = (getUser()?.roles ?? []).includes("route_manager");
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   function load(): void {
     apiGet<Trip>(`/api/trips/${id}`)
@@ -52,6 +55,12 @@ export function TripDetailPage(): React.ReactElement {
   }
 
   useEffect(load, [id]);
+
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
 
   async function assign(staffId: string): Promise<void> {
     const { ok, status, data } = await apiSend<{ error?: string }>("POST", "/api/crew-assignments", {
@@ -75,6 +84,14 @@ export function TripDetailPage(): React.ReactElement {
         subtitle={`${formatDate(trip.operating_date)} · vehicle ${trip.vehicle_id} · route ${trip.route_id}`}
         backTo={`/routes/${trip.route_id}`}
         backLabel="Route"
+        editTo={canWrite(roles, "trips", "update") ? `/trips/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "trips", "delete")
+            ? () => {
+                void apiDelete(`/api/trips/${id}`).then(() => navigate("/trips"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Pencil, Trash2 } from "lucide-react";
 import React from "react";
 import { Link } from "react-router-dom";
 import { STATUS_COLORS } from "../lib/format.js";
@@ -57,18 +57,42 @@ export function DetailHeader({
   subtitle,
   backTo,
   backLabel,
+  editTo,
+  onDelete,
 }: {
   title: string;
   subtitle?: React.ReactNode;
   backTo: string;
   backLabel: string;
+  /** Edit affordance rendered beside the title when the caller may update. */
+  editTo?: string;
+  /** Delete affordance rendered beside the title when the caller may delete. */
+  onDelete?: () => void;
 }): React.ReactElement {
   return (
     <div style={{ marginBottom: 16 }}>
       <Link to={backTo} style={{ fontSize: "0.85rem", color: "#1565c0" }}>
         ← {backLabel}
       </Link>
-      <h2 style={{ margin: "6px 0 2px" }}>{title}</h2>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h2 style={{ margin: "6px 0 2px" }}>{title}</h2>
+        {editTo ? (
+          <Link to={editTo} title="Edit" aria-label="Edit" style={{ color: "#1565c0" }}>
+            <Pencil size={16} style={{ verticalAlign: "text-bottom" }} />
+          </Link>
+        ) : null}
+        {onDelete ? (
+          <button
+            type="button"
+            title="Delete"
+            aria-label="Delete"
+            style={{ border: "none", background: "none", cursor: "pointer", color: "#c33" }}
+            onClick={() => onDelete()}
+          >
+            <Trash2 size={16} style={{ verticalAlign: "text-bottom" }} />
+          </button>
+        ) : null}
+      </div>
       {subtitle ? <div style={{ color: "#666" }}>{subtitle}</div> : null}
     </div>
   );
@@ -264,7 +288,7 @@ export function ExpandableTable<T>({
               {c.header}
             </th>
           ))}
-          {detailPath ? <th style={{ padding: "8px 12px", fontSize: "0.85rem" }}>Detail</th> : null}
+          {detailPath || rowActions ? <th style={{ padding: "8px 12px", fontSize: "0.85rem" }}>Detail</th> : null}
         </tr>
       </thead>
       <tbody>
@@ -285,19 +309,17 @@ export function ExpandableTable<T>({
                     {c.render(row)}
                   </td>
                 ))}
-                {detailPath ? (
-                  <td style={{ padding: "8px 12px", fontSize: "0.9rem" }} onClick={(e) => e.stopPropagation()}>
-                    <Link to={detailPath(row)} title={`${detailLabel} detail`} aria-label={`${detailLabel} detail`}>
-                      <ExternalLink size={16} style={{ verticalAlign: "text-bottom" }} />
-                    </Link>
-                  </td>
-                ) : null}
-                {rowActions ? (
+                {detailPath || rowActions ? (
                   <td
                     style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center" }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {rowActions(row)}
+                    {detailPath ? (
+                      <Link to={detailPath(row)} title={`${detailLabel} detail`} aria-label={`${detailLabel} detail`}>
+                        <ExternalLink size={16} style={{ verticalAlign: "text-bottom" }} />
+                      </Link>
+                    ) : null}
+                    {rowActions ? rowActions(row) : null}
                   </td>
                 ) : null}
               </tr>

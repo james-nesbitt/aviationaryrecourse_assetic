@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet, type FatigueRow, type TripLeg } from "../../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet, type FatigueRow, type TripLeg } from "../../lib/api.js";
+import { canWrite } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatHours, legChain, tripHours } from "../../lib/format.js";
 
@@ -37,12 +38,20 @@ export function StaffDetailPage(): React.ReactElement {
   const { id = "" } = useParams();
   const [staff, setStaff] = useState<StaffDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     apiGet<StaffDetail>(`/api/staff/${id}`)
       .then(setStaff)
       .catch((e: Error) => setError(e.message));
   }, [id]);
+
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
 
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!staff) return <div>Loading…</div>;
@@ -59,6 +68,14 @@ export function StaffDetailPage(): React.ReactElement {
         subtitle={`${staff.role} · ${staff.role_class} · ${staff.operator_id} · base ${staff.base_iata}`}
         backTo="/staff"
         backLabel="Staff"
+        editTo={canWrite(roles, "staff", "update") ? `/staff/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "staff", "delete")
+            ? () => {
+                void apiDelete(`/api/staff/${id}`).then(() => navigate("/staff"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

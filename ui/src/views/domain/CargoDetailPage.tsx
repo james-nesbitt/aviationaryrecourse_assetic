@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet, type Trip } from "../../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet, type Trip } from "../../lib/api.js";
+import { canWrite } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 
@@ -40,6 +41,8 @@ interface CargoDetail {
 export function CargoDetailPage(): React.ReactElement {
   const { id = "" } = useParams();
   const [cargo, setCargo] = useState<CargoDetail | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,6 +50,12 @@ export function CargoDetailPage(): React.ReactElement {
       .then(setCargo)
       .catch((e: Error) => setError(e.message));
   }, [id]);
+
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
 
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!cargo) return <div>Loading…</div>;
@@ -58,6 +67,14 @@ export function CargoDetailPage(): React.ReactElement {
         subtitle={`${cargo.cargo_type} · ${cargo.weight_kg} kg · ${cargo.operator_name}`}
         backTo="/cargo"
         backLabel="Cargo"
+        editTo={canWrite(roles, "cargo", "update") ? `/cargo/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "cargo", "delete")
+            ? () => {
+                void apiDelete(`/api/cargo/${id}`).then(() => navigate("/cargo"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

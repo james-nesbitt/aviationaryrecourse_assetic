@@ -37,6 +37,8 @@ export interface EntitySpec {
   entityKey?: import("./permissions.js").EntityKey;
   /** Which operations the API offers for this entity (mirrors lib/permissions DOMAIN). */
   crud?: { create?: boolean; update?: boolean; delete?: boolean };
+  /** Editable fields for the generic form; mirrors the API's updateFields. */
+  formFields?: { key: string; label: string; type?: "text" | "number" | "date" | "select"; options?: string[]; required?: boolean }[];
   expansion: (row: Row) => { label: string; value: React.ReactNode }[];
   detailPath?: (row: Row) => string;
   detailLabel?: string;
@@ -54,6 +56,14 @@ export const ENTITIES: EntitySpec[] = [
     key: "operators",
     label: "Operators",
     path: "/operators",
+    formFields: [
+      { key: "name", label: "Name", required: true },
+      { key: "type", label: "Type", type: "select", options: ["passenger", "cargo", "military"], required: true },
+      { key: "country", label: "Country", required: true },
+      { key: "hub_iata", label: "Hub IATA", required: true },
+      { key: "founded_year", label: "Founded year", type: "number" },
+      { key: "fleet_size_hint", label: "Fleet size hint", type: "number" },
+    ],
     entityKey: "operators",
     idField: "operator_id",
     crud: { create: true, update: true, delete: true },
@@ -78,6 +88,11 @@ export const ENTITIES: EntitySpec[] = [
     key: "vehicles",
     label: "Vehicles",
     path: "/vehicles",
+    formFields: [
+      { key: "registration", label: "Registration" },
+      { key: "status", label: "Status", type: "select", options: ["active", "stored", "maintenance"] },
+      { key: "base_iata", label: "Base IATA" },
+    ],
     entityKey: "vehicles",
     idField: "vehicle_id",
     crud: { create: true, update: true, delete: true },
@@ -157,6 +172,11 @@ export const ENTITIES: EntitySpec[] = [
     key: "vehicle-maintenance",
     label: "Maintenance",
     path: "/vehicle-maintenance",
+    formFields: [
+      { key: "maintenance_type", label: "Type", type: "select", options: ["a_check", "b_check", "c_check", "unscheduled"], required: true },
+      { key: "start_date", label: "Start date", type: "date", required: true },
+      { key: "end_date", label: "End date", type: "date", required: true },
+    ],
     entityKey: "vehicle-maintenance",
     idField: "maintenance_id",
     crud: { create: true, update: true, delete: true },
@@ -231,6 +251,12 @@ export const ENTITIES: EntitySpec[] = [
     key: "staff",
     label: "Staff",
     path: "/staff",
+    formFields: [
+      { key: "given_name", label: "Given name", required: true },
+      { key: "family_name", label: "Family name", required: true },
+      { key: "role", label: "Role", required: true },
+      { key: "keycloak_username", label: "Keycloak username" },
+    ],
     entityKey: "staff",
     idField: "staff_id",
     crud: { create: true, update: true, delete: true },
@@ -267,6 +293,11 @@ export const ENTITIES: EntitySpec[] = [
     key: "customers",
     label: "Customers",
     path: "/customers",
+    formFields: [
+      { key: "company_name", label: "Company name", required: true },
+      { key: "customer_type", label: "Type", type: "select", options: ["cargo_shipper", "charter"], required: true },
+      { key: "monthly_volume_kg", label: "Monthly volume (kg)", type: "number" },
+    ],
     entityKey: "customers",
     idField: "customer_id",
     crud: { create: true, update: true, delete: true },
@@ -384,6 +415,12 @@ export const ENTITIES: EntitySpec[] = [
     key: "airports",
     label: "Airports",
     path: "/airports",
+    formFields: [
+      { key: "name", label: "Name", required: true },
+      { key: "city", label: "City" },
+      { key: "country", label: "Country" },
+      { key: "timezone", label: "Timezone" },
+    ],
     entityKey: "airports",
     idField: "iata",
     crud: { update: true },
@@ -409,6 +446,10 @@ export const ENTITIES: EntitySpec[] = [
     key: "aircraft-models",
     label: "Aircraft models",
     path: "/aircraft-models",
+    formFields: [
+      { key: "name", label: "Name", required: true },
+      { key: "category", label: "Category", type: "select", options: ["narrow_body", "wide_body", "regional", "turboprop", "jet"], required: true },
+    ],
     entityKey: "aircraft-models",
     idField: "model_id",
     crud: { create: true, update: true },

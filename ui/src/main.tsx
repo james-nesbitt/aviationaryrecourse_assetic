@@ -6,6 +6,7 @@ import { LoginView } from "./views/LoginView.js";
 import { CallbackView } from "./views/CallbackView.js";
 import { AdminPanelView } from "./views/AdminPanelView.js";
 import { EntityListPage } from "./views/EntityListPage.js";
+import { EntityEditPage } from "./views/EntityEditPage.js";
 import { FleetView } from "./views/fleet/FleetView.js";
 import { VehicleDetailPage } from "./views/fleet/VehicleDetailPage.js";
 import { MaintenanceDetailPage } from "./views/fleet/MaintenanceDetailPage.js";
@@ -68,6 +69,15 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           {/* One list route per registered entity, all the same component. */}
           {ENTITIES.map((e) => (
             <Route key={e.key} path={e.path.slice(1)} element={<EntityListPage />} />
+          ))}
+
+          {/* Edit routes: generic form per entity, from the registry. */}
+          {ENTITIES.map((e) => (
+            <Route
+              key={`${e.key}-edit`}
+              path={`${e.path.slice(1)}/:id/edit`}
+              element={<EntityEditPage />}
+            />
           ))}
 
           {/* Detail routes: bespoke dashboard where one exists, else generic. */}
