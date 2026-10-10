@@ -288,7 +288,7 @@ export function ExpandableTable<T>({
               {c.header}
             </th>
           ))}
-          {detailPath || rowActions ? <th style={{ padding: "8px 12px", fontSize: "0.85rem" }}>Detail</th> : null}
+          {detailPath || rowActions ? <th style={{ padding: "8px 12px", fontSize: "0.85rem" }}>Actions</th> : null}
         </tr>
       </thead>
       <tbody>
@@ -325,16 +325,8 @@ export function ExpandableTable<T>({
               </tr>
               {isOpen ? (
                 <tr>
-                  <td colSpan={columns.length + (detailPath ? 2 : 1)} style={{ padding: "12px 16px", background: "#f9f9f9" }}>
+                  <td colSpan={columns.length + 1} style={{ padding: "12px 16px", background: "#f9f9f9" }}>
                     <FieldGrid fields={expansion(row)} />
-                    {detailPath ? (
-                      <div style={{ marginTop: 10 }}>
-                        <Link to={detailPath(row)} title={`${detailLabel} detail`} aria-label={`${detailLabel} detail`}>
-                          <ExternalLink size={16} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />
-                          {detailLabel}
-                        </Link>
-                      </div>
-                    ) : null}
                   </td>
                 </tr>
               ) : null}
