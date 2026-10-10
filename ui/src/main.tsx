@@ -6,6 +6,7 @@ import { LoginView } from "./views/LoginView.js";
 import { CallbackView } from "./views/CallbackView.js";
 import { AdminPanelView } from "./views/AdminPanelView.js";
 import { EntityListPage } from "./views/EntityListPage.js";
+import { EntityEditPage } from "./views/EntityEditPage.js";
 import { FleetView } from "./views/fleet/FleetView.js";
 import { VehicleDetailPage } from "./views/fleet/VehicleDetailPage.js";
 import { MaintenanceDetailPage } from "./views/fleet/MaintenanceDetailPage.js";
@@ -70,8 +71,19 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route key={e.key} path={e.path.slice(1)} element={<EntityListPage />} />
           ))}
 
-          {/* Detail routes: bespoke dashboard where one exists, else generic. */}
-          {ENTITIES.map((e) => (
+          {/* Edit routes: generic form per entity. Subordinate records
+              (crew/route assignments) have no form and no :id route of their own. */}
+          {ENTITIES.filter((e) => !e.subordinate).map((e) => (
+            <Route
+              key={`${e.key}-edit`}
+              path={`${e.path.slice(1)}/:id/edit`}
+              element={<EntityEditPage />}
+            />
+          ))}
+
+          {/* Detail routes: bespoke dashboard where one exists, else generic.
+              Subordinate records route their rows to the parent entity instead. */}
+          {ENTITIES.filter((e) => !e.subordinate).map((e) => (
             <Route
               key={`${e.key}-detail`}
               path={`${e.path.slice(1)}/:id`}

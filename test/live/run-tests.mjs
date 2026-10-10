@@ -180,6 +180,23 @@ async function testTransit(token) {
 async function testTrips(token) {
   console.log("\n── Trips (admin) ──");
 
+  // Regression: the soft-delete filter edits once corrupted three raw queries
+  // (WHERE injected before JOIN) and these endpoints 500'd on the live stack
+  // for a day before a user hit them. Each must answer 200 with data.
+  const tripsForCrew = await fetchJson(`${BASE_URL}/api/trips?status=completed`, { headers: authHeader(token) });
+  const crewedTrip = tripsForCrew.json?.find((t) => t.vehicle_id) ?? tripsForCrew.json?.[0];
+  if (crewedTrip) {
+    const crewDetail = await fetchJson(`${BASE_URL}/api/trips/${crewedTrip.trip_id}/crew`, { headers: authHeader(token) });
+    assert(crewDetail.status === 200, "GET /api/trips/:id/crew returns 200 (raw-query regression guard)");
+    assert(Array.isArray(crewDetail.json), "GET /api/trips/:id/crew returns array");
+  }
+  const staffList = await fetchJson(`${BASE_URL}/api/staff`, { headers: authHeader(token) });
+  if (staffList.json?.[0]) {
+    const staffDetail = await fetchJson(`${BASE_URL}/api/staff/${staffList.json[0].staff_id}`, { headers: authHeader(token) });
+    assert(staffDetail.status === 200, "GET /api/staff/:id returns 200 (duty-record raw-query regression guard)");
+    assert(Array.isArray(staffDetail.json.assignments), "GET /api/staff/:id returns duty record");
+  }
+
   // 1. assignments: per route contiguous, one open, at least one maintenance_cover
   const asgRes = await fetchJson(`${BASE_URL}/api/route-assignments`, { headers: authHeader(token) });
   assert(asgRes.status === 200, "GET /api/route-assignments returns 200");

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { apiGet } from "../lib/api.js";
 import { ENTITIES } from "../lib/entities.jsx";
 import { Section } from "../components/index.jsx";
@@ -75,9 +76,9 @@ export function AdminPanelView(): React.ReactElement {
 
       <Section title="Role dashboards">
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <Link to="/fleet">Fleet &amp; Maintenance →</Link>
-          <Link to="/operations">Operations Control →</Link>
-          <Link to="/accounts">Accounts →</Link>
+          <Link to="/fleet">Fleet &amp; Maintenance <ArrowRight size={14} style={{verticalAlign:"text-bottom"}} /></Link>
+          <Link to="/operations">Operations Control <ArrowRight size={14} style={{verticalAlign:"text-bottom"}} /></Link>
+          <Link to="/accounts">Accounts <ArrowRight size={14} style={{verticalAlign:"text-bottom"}} /></Link>
         </div>
       </Section>
     </div>

@@ -20,7 +20,7 @@ import { operatingDates, shiftLegs, tripStatus, type RouteLeg } from "../lib/tri
  * rather than the server clock (a demo dataset dated in 2000 would otherwise
  * generate decades of trips out to "today + 14 days").
  */
-async function datasetAnchor(): Promise<{ anchorDate: Date; anchorAt: Date }> {
+export async function datasetAnchor(): Promise<{ anchorDate: Date; anchorAt: Date }> {
   const rows = await prisma.$queryRaw<{ anchor_date: Date; anchor_at: Date }[]>`
     SELECT anchor_date, anchor_at FROM dataset_anchor_v
   `;
@@ -33,7 +33,7 @@ async function datasetAnchor(): Promise<{ anchorDate: Date; anchorAt: Date }> {
 export async function registerDomainRoutes(app: FastifyInstance): Promise<void> {
   // ── Operators ──────────────────────────────────────────────────────────
   app.get("/api/operators", async () => {
-    return prisma.operator.findMany({ orderBy: { operatorId: "asc" } });
+    return prisma.operator.findMany({ where: { deletedAt: null }, orderBy: { operatorId: "asc" } });
   });
 
   app.get("/api/operators/:id", async (request) => {
@@ -48,7 +48,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.kind) where.kind = query.kind;
     if (query.operatorId) where.operatorId = query.operatorId;
     return prisma.vehicle.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { model: true, operator: true },
       orderBy: { vehicleId: "asc" },
     });
@@ -70,7 +70,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.role) where.role = query.role;
     const [rows, { anchorDate }] = await Promise.all([
       prisma.staff.findMany({
-        where,
+        where: { ...where, deletedAt: null },
         include: { operator: true },
         orderBy: { staffId: "asc" },
       }),
@@ -138,7 +138,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     const where: Record<string, unknown> = {};
     if (query.operatorId) where.operatorId = query.operatorId;
     return prisma.route.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { operator: true },
       orderBy: { routeId: "asc" },
     });
@@ -158,7 +158,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.operatorId) where.operatorId = query.operatorId;
     if (query.status) where.status = query.status;
     return prisma.trip.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       orderBy: [{ operatingDate: "asc" }, { routeId: "asc" }],
     });
   });
@@ -175,7 +175,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
              s.staff_id, s.given_name, s.family_name, s.role, s.base_iata
       FROM crew_assignment ca
       JOIN staff s ON s.staff_id = ca.staff_id
-      WHERE ca.trip_id = ${id}
+      WHERE ca.deleted_at IS NULL AND ca.trip_id = ${id}
       ORDER BY ca.crew_role, s.staff_id
     `;
   });
@@ -187,7 +187,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.routeId) where.routeId = query.routeId;
     if (query.vehicleId) where.vehicleId = query.vehicleId;
     return prisma.routeAssignment.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       orderBy: [{ routeId: "asc" }, { validFrom: "asc" }],
     });
   });
@@ -199,7 +199,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.vehicleId) where.vehicleId = query.vehicleId;
     if (query.status) where.status = query.status;
     return prisma.vehicleMaintenance.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       orderBy: [{ vehicleId: "asc" }, { startDate: "asc" }],
     });
   });
@@ -241,6 +241,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
              ca.crew_role, s.staff_id, s.given_name, s.family_name
       FROM trip t
       LEFT JOIN crew_assignment ca ON ca.trip_id = t.trip_id
+      WHERE t.deleted_at IS NULL
       LEFT JOIN staff s ON s.staff_id = ca.staff_id
       WHERE t.route_id = ${id}
       ORDER BY t.operating_date ASC, ca.crew_role ASC
@@ -280,13 +281,13 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
                        - (legs -> 0 ->> 'scheduled_departure')::timestamp
                      )) / 3600.0
                    )::numeric, 1)::float8 AS block_hours
-            FROM trip WHERE vehicle_id = ${id}
+            FROM trip WHERE vehicle_id = ${id} AND deleted_at IS NULL
             GROUP BY 1 ORDER BY 1
           `,
           prisma.$queryRaw`
             SELECT maintenance_type, count(*)::int AS windows,
                    sum(end_date - start_date + 1)::int AS days
-            FROM vehicle_maintenance WHERE vehicle_id = ${id}
+            FROM vehicle_maintenance WHERE vehicle_id = ${id} AND deleted_at IS NULL
             GROUP BY 1 ORDER BY 1
           `,
           prisma.$queryRaw`
@@ -294,7 +295,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
                    count(*) FILTER (WHERE status = 'completed')::int AS completed,
                    count(*) FILTER (WHERE status = 'cancelled')::int AS cancelled,
                    count(DISTINCT operating_date)::int AS operating_days
-            FROM trip WHERE vehicle_id = ${id}
+            FROM trip WHERE vehicle_id = ${id} AND deleted_at IS NULL
           `,
         ]);
         return {
@@ -318,7 +319,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.tripId) where.tripId = query.tripId;
     if (query.staffId) where.staffId = query.staffId;
     return prisma.crewAssignment.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       orderBy: [{ tripId: "asc" }, { crewRole: "asc" }],
     });
   });
@@ -354,8 +355,8 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
         SELECT ca.assignment_id, ca.crew_role, t.trip_id, t.route_id,
                t.operating_date, t.status, t.vehicle_id, t.legs
         FROM crew_assignment ca
-        JOIN trip t ON t.trip_id = ca.trip_id
-        WHERE ca.staff_id = ${id}
+        JOIN trip t ON t.trip_id = ca.trip_id AND t.deleted_at IS NULL
+        WHERE ca.deleted_at IS NULL AND ca.staff_id = ${id}
         ORDER BY t.operating_date DESC
       `,
       prisma.$queryRaw`SELECT * FROM crew_fatigue_v WHERE staff_id = ${id}`,
@@ -609,7 +610,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     if (query.status) where.status = query.status;
     if (query.operatorId) where.operatorId = query.operatorId;
     return prisma.asseticOrder.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       include: { customer: true, operator: true },
       orderBy: { orderId: "asc" },
     });
@@ -625,12 +626,12 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Airports (reference) ───────────────────────────────────────────────
   app.get("/api/airports", async () => {
-    return prisma.airport.findMany({ orderBy: { iata: "asc" } });
+    return prisma.airport.findMany({ where: { deletedAt: null }, orderBy: { iata: "asc" } });
   });
 
   // ── Aircraft models (reference) ────────────────────────────────────────
   app.get("/api/aircraft-models", async () => {
-    return prisma.aircraftModel.findMany({ orderBy: { modelId: "asc" } });
+    return prisma.aircraftModel.findMany({ where: { deletedAt: null }, orderBy: { modelId: "asc" } });
   });
 
   // ── Facilities ─────────────────────────────────────────────────────────
@@ -638,75 +639,6 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     return prisma.facility.findMany({
       include: { operator: true },
       orderBy: { facilityId: "asc" },
-    });
-  });
-
-  // ── Write endpoints ────────────────────────────────────────────────────
-  // Every write picks its mutable fields explicitly: a request body can
-  // only set what the endpoint's contract names. schema_version and
-  // generated_at are datagen provenance and never client-settable.
-  const OPERATOR_FIELDS = ["operator_id", "name", "type", "country", "hub_iata", "founded_year", "fleet_size_hint"] as const;
-  const OPERATOR_MUTABLE_FIELDS = ["name", "type", "country", "hub_iata", "founded_year", "fleet_size_hint"] as const;
-  const ORDER_FIELDS = ["order_id", "customer_id", "operator_id", "order_type", "account_manager_id", "trip_manager_id", "origin_iata", "destination_iata", "planned_legs", "transit_route_ids", "ordered_on", "status", "passenger_group", "freight"] as const;
-  const ORDER_MUTABLE_FIELDS = ["order_type", "account_manager_id", "trip_manager_id", "origin_iata", "destination_iata", "planned_legs", "transit_route_ids", "ordered_on", "status", "passenger_group", "freight"] as const;
-  const OPERATOR_REQUIRED = ["operator_id", "name", "type", "country", "hub_iata", "founded_year"] as const;
-  const ORDER_REQUIRED = ["order_id", "customer_id", "operator_id", "order_type", "origin_iata", "destination_iata", "ordered_on"] as const;
-
-  app.post("/api/operators", async (request, reply) => {
-    requireRole(request.user!, "asset_manager");
-    const body = request.body as Record<string, unknown>;
-    const missing = missingFields(body, OPERATOR_REQUIRED);
-    if (missing.length > 0) {
-      return reply.code(400).send({ error: "missing_fields", fields: missing });
-    }
-    const { anchorDate } = await datasetAnchor();
-    return prisma.operator.create({
-      data: {
-        ...(pickFields(body, OPERATOR_FIELDS) as { operatorId: string; name: string; type: string; country: string; hubIata: string; foundedYear: number }),
-        fleetSizeHint: (body.fleet_size_hint as number | undefined) ?? 0,
-        generatedAt: anchorDate,
-      },
-    });
-  });
-
-  app.patch("/api/operators/:id", async (request) => {
-    requireRole(request.user!, "asset_manager");
-    const { id } = request.params as { id: string };
-    const body = request.body as Record<string, unknown>;
-    return prisma.operator.update({
-      where: { operatorId: id },
-      data: pickFields(body, OPERATOR_MUTABLE_FIELDS),
-    });
-  });
-
-  app.post("/api/orders", async (request, reply) => {
-    requireRole(request.user!, "route_manager");
-    const body = request.body as Record<string, unknown>;
-    const missing = missingFields(body, ORDER_REQUIRED);
-    if (missing.length > 0) {
-      return reply.code(400).send({ error: "missing_fields", fields: missing });
-    }
-    const { anchorDate } = await datasetAnchor();
-    return prisma.asseticOrder.create({
-      data: {
-        ...(pickFields(body, ORDER_FIELDS) as {
-          orderId: string; customerId: string; operatorId: string;
-          orderType: string; originIata: string; destinationIata: string; orderedOn: Date;
-        }),
-        plannedLegs: (body.planned_legs as object[] | undefined) ?? [],
-        status: (body.status as string | undefined) ?? "requested",
-        generatedAt: anchorDate,
-      },
-    });
-  });
-
-  app.patch("/api/orders/:id", async (request) => {
-    requireRole(request.user!, "route_manager");
-    const { id } = request.params as { id: string };
-    const body = request.body as Record<string, unknown>;
-    return prisma.asseticOrder.update({
-      where: { orderId: id },
-      data: pickFields(body, ORDER_MUTABLE_FIELDS),
     });
   });
 
@@ -802,8 +734,10 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
     const crewed = await prisma.$queryRaw<{ count: bigint }[]>`
       SELECT count(*) AS count
-      FROM crew_assignment ca JOIN trip t ON t.trip_id = ca.trip_id
-      WHERE t.route_id = ${id} AND t.operating_date >= ${effective}
+      FROM crew_assignment ca
+      JOIN trip t ON t.trip_id = ca.trip_id AND t.deleted_at IS NULL
+      WHERE ca.deleted_at IS NULL
+        AND t.route_id = ${id} AND t.operating_date >= ${effective}
     `;
     if (Number(crewed[0]?.count ?? 0) > 0) {
       reply.code(409);

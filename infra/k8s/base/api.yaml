@@ -83,6 +83,7 @@ spec:
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/005_route_recurrence.sql
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/006_trips_crew.sql
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/007_staff_date_of_birth.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/008_entity_crud.sql
               echo "Migrations applied."
 
               # Load data from datagen JSONL
@@ -188,7 +189,7 @@ spec:
             name: assetic-api-source
         - name: migrations
           configMap:
-            name: assetic-db-migrations-v2
+            name: assetic-db-migrations-v3
         - name: datagen
           configMap:
             name: assetic-datagen-data

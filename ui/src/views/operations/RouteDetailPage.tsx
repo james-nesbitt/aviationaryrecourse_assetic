@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  apiDelete,
   apiGet,
   apiSend,
   type RouteAssignment,
   type Trip,
   type TripLeg,
 } from "../../lib/api.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline } from "../../components/index.jsx";
 import { formatDate, formatDateTime, legChain } from "../../lib/format.js";
 import { getUser } from "../../lib/auth.js";
@@ -42,6 +44,8 @@ export function RouteDetailPage(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [maintenance, setMaintenance] = useState<MaintenanceWindow[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
   const canEdit = (getUser()?.roles ?? []).includes("route_manager");
 
   const [effectiveFrom, setEffectiveFrom] = useState("");
@@ -65,6 +69,12 @@ export function RouteDetailPage(): React.ReactElement {
   }
 
   useEffect(load, [id]);
+
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
 
   async function submitChange(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -98,6 +108,14 @@ export function RouteDetailPage(): React.ReactElement {
         subtitle={`${route.route_type} · every ${route.frequency_days}d from ${formatDate(route.first_operating_date)} · ${route.operator_id}`}
         backTo="/operations"
         backLabel="Operations"
+        editTo={canWrite(roles, "routes", "update") && hasEditForm("routes") ? `/routes/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "routes", "delete")
+            ? () => {
+                void apiDelete(`/api/routes/${id}`).then(() => navigate("/routes"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

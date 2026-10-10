@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet } from "../../lib/api.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatDateTime } from "../../lib/format.js";
 
@@ -42,6 +43,8 @@ export function OrderDetailPage(): React.ReactElement {
   const { id = "" } = useParams();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [passengers, setPassengers] = useState<PassengerRow[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +57,12 @@ export function OrderDetailPage(): React.ReactElement {
       .catch((e: Error) => setError(e.message));
   }, [id]);
 
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
+
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!order) return <div>Loading…</div>;
 
@@ -64,6 +73,14 @@ export function OrderDetailPage(): React.ReactElement {
         subtitle={`${order.order_type} · ordered ${formatDate(order.ordered_on)} · ${order.operator_id}`}
         backTo="/orders"
         backLabel="Orders"
+        editTo={canWrite(roles, "orders", "update") && hasEditForm("orders") ? `/orders/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "orders", "delete")
+            ? () => {
+                void apiDelete(`/api/orders/${id}`).then(() => navigate("/orders"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

@@ -29,3 +29,6 @@ api/.smoke/
 *.tsbuildinfo
 ui/vite.config.d.ts
 ui/vite.config.js
+
+# Project-local oh-my-pi state, caches, skills and model pin — local only
+.omp/

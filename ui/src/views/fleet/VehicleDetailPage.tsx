@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet, type MaintenanceWindow, type Trip } from "../../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet, type MaintenanceWindow, type Trip } from "../../lib/api.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard, Timeline } from "../../components/index.jsx";
 import { BarStack, LineTrend } from "../../charts/index.jsx";
 import { formatDate, legChain } from "../../lib/format.js";
@@ -41,6 +42,8 @@ export function VehicleDetailPage(): React.ReactElement {
   const [maintenance, setMaintenance] = useState<MaintenanceWindow[]>([]);
   const [stats, setStats] = useState<VehicleStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     Promise.all([
@@ -58,6 +61,12 @@ export function VehicleDetailPage(): React.ReactElement {
       .catch((e: Error) => setError(e.message));
   }, [id]);
 
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
+
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!vehicle || !stats) return <div>Loading…</div>;
 
@@ -71,6 +80,14 @@ export function VehicleDetailPage(): React.ReactElement {
         subtitle={`${vehicle.model_id ?? "unknown model"} · base ${vehicle.base_iata ?? "—"} · ${vehicle.operator_id}`}
         backTo="/fleet"
         backLabel="Fleet"
+        editTo={canWrite(roles, "vehicles", "update") && hasEditForm("vehicles") ? `/vehicles/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "vehicles", "delete")
+            ? () => {
+                void apiDelete(`/api/vehicles/${id}`).then(() => navigate("/vehicles"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { apiGet } from "../../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { apiDelete, apiGet } from "../../lib/api.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard } from "../../components/index.jsx";
 import { DonutBreakdown } from "../../charts/index.jsx";
 
@@ -46,6 +47,8 @@ export function OperatorDetailPage(): React.ReactElement {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [routes, setRoutes] = useState<RouteRow[]>([]);
   const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,6 +67,12 @@ export function OperatorDetailPage(): React.ReactElement {
       .catch((e: Error) => setError(e.message));
   }, [id]);
 
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
+
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!operator) return <div>Loading…</div>;
 
@@ -81,6 +90,14 @@ export function OperatorDetailPage(): React.ReactElement {
         subtitle={`${operator.type} operator · hub ${operator.hub_iata} · ${operator.country} · founded ${operator.founded_year}`}
         backTo="/operators"
         backLabel="Operators"
+        editTo={canWrite(roles, "operators", "update") && hasEditForm("operators") ? `/operators/${id}/edit` : undefined}
+        onDelete={
+          canWrite(roles, "operators", "delete")
+            ? () => {
+                void apiDelete(`/api/operators/${id}`).then(() => navigate("/operators"));
+              }
+            : undefined
+        }
       />
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

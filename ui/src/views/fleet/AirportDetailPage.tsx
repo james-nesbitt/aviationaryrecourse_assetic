@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet } from "../../lib/api.js";
+import { canWrite, hasEditForm } from "../../lib/permissions.js";
 import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section } from "../../components/index.jsx";
 import { formatDate, formatDateTime } from "../../lib/format.js";
 
@@ -68,6 +69,7 @@ export function AirportDetailPage(): React.ReactElement {
   const [airport, setAirport] = useState<AirportRow | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -81,6 +83,12 @@ export function AirportDetailPage(): React.ReactElement {
       .catch((e: Error) => setError(e.message));
   }, [id]);
 
+  useEffect(() => {
+    apiGet<{ roles?: string[] }>("/api/me")
+      .then((me) => setRoles(me.roles ?? []))
+      .catch(() => setRoles([]));
+  }, []);
+
   if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
   if (!airport || !activity) return <div>Loading…</div>;
 
@@ -91,6 +99,7 @@ export function AirportDetailPage(): React.ReactElement {
         subtitle={`${airport.city}, ${airport.country}`}
         backTo="/airports"
         backLabel="Airports"
+        editTo={canWrite(roles, "airports", "update") && hasEditForm("airports") ? `/airports/${id}/edit` : undefined}
       />
 
       <DetailTabs
