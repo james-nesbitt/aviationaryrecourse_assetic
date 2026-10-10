@@ -32,7 +32,21 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "assetic-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "assetic-api",
+            "id.token.claim": false,
+            "access.token.claim": true,
+            "userinfo.token.claim": false
+          }
+        }
+      ]
     },
     {
       "clientId": "assetic-api",
@@ -84,6 +98,10 @@
       {
         "name": "crew",
         "description": "Flight crew self-service (own trips and fatigue)"
+      },
+      {
+        "name": "journal_writer",
+        "description": "Append entries to the audit journal"
       }
     ]
   },
@@ -107,7 +125,8 @@
         "route_manager",
         "sysadmin",
         "maintenance",
-        "crew"
+        "crew",
+        "journal_writer"
       ],
       "attributes": {
         "demo-account": [

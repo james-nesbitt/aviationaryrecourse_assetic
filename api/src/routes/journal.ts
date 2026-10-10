@@ -1,11 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
+import { requireRole } from "../lib/auth.js";
 
 /**
  * Journal append endpoint.
  * Appends a hash-chained entry to the append-only journal_entry table.
  * Uses raw SQL (not Prisma) because the journal has INSERT-only grants and
  * hash-chain computation that Prisma doesn't model.
+ *
+ * The journal is the system's source of truth, so appends are restricted to
+ * the journal_writer role and the actor is always the authenticated
+ * principal's token subject. A client-supplied actor_id is rejected — a
+ * caller who tries to forge attribution learns the contract rather than
+ * silently mis-attributing the entry.
  *
  * POST /api/journal
  * Body: {
@@ -15,13 +22,14 @@ import { prisma } from "../lib/prisma.js";
  *   entity_id: string,
  *   payload: object,
  *   valid_time: string (ISO),
- *   actor_id: string,
+ *   actor_id?: string (rejected if present — attribution comes from the token)
  *   agent_run_id?: string
  * }
  */
 
 export async function registerJournalRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/journal", async (request, reply) => {
+    requireRole(request.user!, "journal_writer");
     const body = request.body as {
       chain_key: string;
       event_type: string;
@@ -32,6 +40,17 @@ export async function registerJournalRoutes(app: FastifyInstance): Promise<void>
       actor_id: string;
       agent_run_id?: string;
     };
+
+    // Attribution is the authenticated principal, never the body. A caller
+    // supplying actor_id is trying to write as someone else — reject loudly
+    // so the contract change is visible rather than silently mis-attributed.
+    if (body.actor_id !== undefined && body.actor_id !== null) {
+      return reply.code(400).send({
+        error: "actor_id_must_not_be_supplied",
+        message: "Journal attribution is derived from the authenticated token.",
+      });
+    }
+    const actorId = request.user!.sub;
 
     // Compute hash chain: find the last row in this chain
     const lastRow = (await prisma.$queryRaw`
@@ -72,7 +91,7 @@ export async function registerJournalRoutes(app: FastifyInstance): Promise<void>
       VALUES
         (${journalId}, ${body.chain_key}, ${body.event_type},
          ${body.entity_type}, ${body.entity_id},
-         ${body.actor_id}, ${body.agent_run_id ?? null},
+         ${actorId}, ${body.agent_run_id ?? null},
          ${payloadJson}::jsonb, ${body.valid_time}::timestamptz,
          now(),
          ${prevHash}, ${rowHash}, 1)

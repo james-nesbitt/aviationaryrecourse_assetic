@@ -357,11 +357,26 @@ async function testJournal(token) {
       entity_id: "smoke-test",
       payload,
       valid_time: new Date().toISOString(),
-      actor_id: "test-runner",
     }),
   });
   const writeData = await writeRes.json();
   assert(writeRes.status === 201, "POST /api/journal returns 201");
+
+  // Security contract: attribution comes from the token, never the body.
+  const forged = await fetch(`${BASE_URL}/api/journal`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chain_key: "live-suite-forged",
+      event_type: "loading",
+      entity_type: "test",
+      entity_id: "smoke-test",
+      payload: {},
+      valid_time: new Date().toISOString(),
+      actor_id: "someone-else",
+    }),
+  });
+  assert(forged.status === 400, "journal rejects body actor_id (400)");
   assert(typeof writeData?.row_hash === "string" && writeData.row_hash.length === 64, "row_hash is 64-char SHA-256");
   assert(writeData?.prev_hash === "GENESIS", "first entry has prev_hash=GENESIS");
 
@@ -376,7 +391,6 @@ async function testJournal(token) {
       entity_id: "smoke-test",
       payload: { action: "second" },
       valid_time: new Date().toISOString(),
-      actor_id: "test-runner",
     }),
   });
   const write2Data = await write2Res.json();
