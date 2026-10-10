@@ -91,14 +91,14 @@
     {
       "username": "admin",
       "enabled": true,
-      "email": "admin@assetic.local",
+      "email": "admin@demo.assetic.invalid",
       "firstName": "Admin",
       "lastName": "User",
       "credentials": [
         {
           "type": "password",
           "value": "admin",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
@@ -108,109 +108,144 @@
         "sysadmin",
         "maintenance",
         "crew"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "tripmgr",
       "enabled": true,
-      "email": "tripmgr@assetic.local",
+      "email": "tripmgr@demo.assetic.invalid",
       "firstName": "Trip",
       "lastName": "Manager",
       "credentials": [
         {
           "type": "password",
           "value": "tripmgr",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
         "route_manager"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "loader",
       "enabled": true,
-      "email": "loader@assetic.local",
+      "email": "loader@demo.assetic.invalid",
       "firstName": "Loading",
       "lastName": "Operator",
       "credentials": [
         {
           "type": "password",
           "value": "loader",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
         "loading_team"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "viewer",
       "enabled": true,
-      "email": "viewer@assetic.local",
+      "email": "viewer@demo.assetic.invalid",
       "firstName": "Read",
       "lastName": "Only",
       "credentials": [
         {
           "type": "password",
           "value": "viewer",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
         "analytics"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "maintmgr",
       "enabled": true,
-      "email": "maintmgr@assetic.local",
+      "email": "maintmgr@demo.assetic.invalid",
       "firstName": "Maintenance",
       "lastName": "Manager",
       "credentials": [
         {
           "type": "password",
           "value": "maintmgr",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
         "maintenance"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "n.cabin_crew-0007",
       "enabled": true,
-      "email": "n.cabin_crew-0007@assetic.local",
+      "email": "n.cabin_crew-0007@demo.assetic.invalid",
       "firstName": "Nadia",
       "lastName": "Tanaka",
       "credentials": [
         {
           "type": "password",
           "value": "n.cabin_crew-0007",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
         "crew"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "m.route_manager-0002",
       "enabled": true,
-      "email": "m.route_manager-0002@assetic.local",
+      "email": "m.route_manager-0002@demo.assetic.invalid",
       "firstName": "Mara",
       "lastName": "Sorensen",
       "credentials": [
         {
           "type": "password",
           "value": "m.route_manager-0002",
-          "temporary": false
+          "temporary": true
         }
       ],
       "realmRoles": [
         "route_manager"
-      ]
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     }
   ]
 }

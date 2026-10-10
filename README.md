@@ -113,6 +113,30 @@ kubectl -n assetic-poc create configmap keycloak-realm \
 kubectl -n assetic-poc delete pod -l app.kubernetes.io/name=keycloak
 ```
 
+### Secrets
+
+No credential value lives in git. `infra/k8s/base/secrets.yaml` is a
+template documenting the Secret shapes; the real `assetic-db-credentials`
+is created out-of-band and its password never enters the repository:
+
+```bash
+kubectl -n assetic-poc create secret generic assetic-db-credentials \
+  --from-literal=DATABASE_URL="postgresql://**REDACTED**@assetic-postgres:5432/assetic?schema=public" \
+  --from-literal=POSTGRES_USER=assetic \
+  --from-literal=POSTGRES_PASSWORD=<password> \
+  --from-literal=POSTGRES_DB=assetic
+```
+
+`assetic-api-config` carries only non-secret configuration and is safe
+to apply from the template.
+
+The Keycloak realm import (`infra/keycloak/realm-import.json`) contains
+demo accounts whose passwords equal their usernames — these are
+throwaway fixtures for the POC dataset on an offline homelab realm,
+marked `temporary: true` with the `demo-account` attribute. The live
+test suite and the documented persona logins depend on these values;
+they are not real credentials and must never be reused as such.
+
 ## Database schema
 
 Matches the `tools/datagen` JSONL output exactly:
