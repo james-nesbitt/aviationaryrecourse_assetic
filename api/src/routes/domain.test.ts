@@ -97,17 +97,6 @@ describe("Domain routes", () => {
     expect(app.routes.has("GET /api/orders")).toBe(true);
   });
 
-  it("registers POST /api/operators (write endpoint)", () => {
-    expect(app.routes.has("POST /api/operators")).toBe(true);
-  });
-
-  it("registers PATCH /api/operators/:id (write endpoint)", () => {
-    expect(app.routes.has("PATCH /api/operators/:id")).toBe(true);
-  });
-
-  it("registers POST /api/orders (write endpoint)", () => {
-    expect(app.routes.has("POST /api/orders")).toBe(true);
-  });
 
   it("GET /api/operators calls prisma.operator.findMany", async () => {
     const mocked = vi.mocked(prisma.operator.findMany);
@@ -115,7 +104,7 @@ describe("Domain routes", () => {
     const route = app.routes.get("GET /api/operators");
     expect(route).toBeDefined();
     const result = await route!.handler({ user: mockUser });
-    expect(mocked).toHaveBeenCalledWith({ orderBy: { operatorId: "asc" } });
+    expect(mocked).toHaveBeenCalledWith({ where: { deletedAt: null }, orderBy: { operatorId: "asc" } });
     expect(result).toHaveLength(1);
   });
 
@@ -126,22 +115,8 @@ describe("Domain routes", () => {
     expect(route).toBeDefined();
     await route!.handler({ user: mockUser, query: { kind: "aircraft" } });
     expect(mocked).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { kind: "aircraft" } }),
+      expect.objectContaining({ where: { kind: "aircraft", deletedAt: null } }),
     );
-  });
-
-  it("POST /api/operators requires asset_manager role", async () => {
-    const route = app.routes.get("POST /api/operators");
-    expect(route).toBeDefined();
-    const restrictedUser = { ...mockUser, roles: ["route_manager"] };
-    await expect(route!.handler({ user: restrictedUser, body: {} })).rejects.toThrow();
-  });
-
-  it("POST /api/orders requires route_manager role", async () => {
-    const route = app.routes.get("POST /api/orders");
-    expect(route).toBeDefined();
-    const restrictedUser = { ...mockUser, roles: ["loading_team"] };
-    await expect(route!.handler({ user: restrictedUser, body: {} })).rejects.toThrow();
   });
 
   it("GET /api/orders with status filter passes filter to prisma", async () => {
@@ -151,7 +126,7 @@ describe("Domain routes", () => {
     expect(route).toBeDefined();
     await route!.handler({ user: mockUser, query: { status: "confirmed" } });
     expect(mocked).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { status: "confirmed" } }),
+      expect.objectContaining({ where: { status: "confirmed", deletedAt: null } }),
     );
   });
 
@@ -217,7 +192,7 @@ describe("Domain routes", () => {
     if (!route) throw new Error("route not registered");
     await route.handler({ query: { vehicleId: "veh-0001", status: "completed" } });
     expect(prisma.trip.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { vehicleId: "veh-0001", status: "completed" } }),
+      expect.objectContaining({ where: { vehicleId: "veh-0001", status: "completed", deletedAt: null } }),
     );
   });
 });

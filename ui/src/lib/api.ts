@@ -29,6 +29,11 @@ export async function apiSend<T>(
 
 // ── Shared response shapes ────────────────────────────────────────────────
 
+export async function apiDelete(path: string): Promise<{ ok: boolean; status: number }> {
+  const res = await apiFetch(path, { method: "DELETE" });
+  return { ok: res.ok, status: res.status };
+}
+
 export interface TripLeg {
   sequence: number;
   from_iata: string;

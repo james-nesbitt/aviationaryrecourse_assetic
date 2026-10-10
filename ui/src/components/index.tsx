@@ -1,3 +1,4 @@
+import { ExternalLink } from "lucide-react";
 import React from "react";
 import { Link } from "react-router-dom";
 import { STATUS_COLORS } from "../lib/format.js";
@@ -237,6 +238,7 @@ export function ExpandableTable<T>({
   expansion,
   empty = "No records",
   detailLabel = "Open",
+  rowActions,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -246,6 +248,8 @@ export function ExpandableTable<T>({
   expansion: (row: T) => { label: string; value: React.ReactNode }[];
   empty?: string;
   detailLabel?: string;
+  /** CRUD affordances rendered in their own cell; click-stopped from row expand. */
+  rowActions?: (row: T) => React.ReactNode;
 }): React.ReactElement {
   const [expanded, setExpanded] = React.useState<string | null>(null);
   if (rows.length === 0) return <EmptyState message={empty} />;
@@ -283,7 +287,17 @@ export function ExpandableTable<T>({
                 ))}
                 {detailPath ? (
                   <td style={{ padding: "8px 12px", fontSize: "0.9rem" }} onClick={(e) => e.stopPropagation()}>
-                    <Link to={detailPath(row)}>{detailLabel} →</Link>
+                    <Link to={detailPath(row)} title={`${detailLabel} detail`} aria-label={`${detailLabel} detail`}>
+                      <ExternalLink size={16} style={{ verticalAlign: "text-bottom" }} />
+                    </Link>
+                  </td>
+                ) : null}
+                {rowActions ? (
+                  <td
+                    style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center" }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {rowActions(row)}
                   </td>
                 ) : null}
               </tr>
@@ -293,7 +307,10 @@ export function ExpandableTable<T>({
                     <FieldGrid fields={expansion(row)} />
                     {detailPath ? (
                       <div style={{ marginTop: 10 }}>
-                        <Link to={detailPath(row)}>Open full detail →</Link>
+                        <Link to={detailPath(row)} title={`${detailLabel} detail`} aria-label={`${detailLabel} detail`}>
+                          <ExternalLink size={16} style={{ verticalAlign: "text-bottom", marginRight: 6 }} />
+                          {detailLabel}
+                        </Link>
                       </div>
                     ) : null}
                   </td>

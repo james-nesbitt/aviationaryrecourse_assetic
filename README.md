@@ -93,6 +93,7 @@ kubectl -n assetic-poc create configmap assetic-db-migrations \
   --from-file=005_route_recurrence.sql=db/migrations/005_route_recurrence.sql \
   --from-file=006_trips_crew.sql=db/migrations/006_trips_crew.sql \
   --from-file=007_staff_date_of_birth.sql=db/migrations/007_staff_date_of_birth.sql \
+  --from-file=008_entity_crud.sql=db/migrations/008_entity_crud.sql \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 

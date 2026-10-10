@@ -5,6 +5,7 @@ import { snakeKeys } from "./lib/serialize.js";
 import { registerDomainRoutes } from "./routes/domain.js";
 import { registerIdentityRoutes } from "./routes/me.js";
 import { registerJournalRoutes } from "./routes/journal.js";
+import { registerCrudRoutes } from "./routes/crud.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 const HOST = process.env.HOST ?? "0.0.0.0";
@@ -46,6 +47,7 @@ app.get("/api/auth/config", async () => ({
 await registerDomainRoutes(app);
 await registerIdentityRoutes(app);
 await registerJournalRoutes(app);
+await registerCrudRoutes(app);
 
 app.listen({ port: PORT, host: HOST }, (err) => {
   if (err) {

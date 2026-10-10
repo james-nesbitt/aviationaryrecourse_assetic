@@ -29,3 +29,8 @@ api/.smoke/
 *.tsbuildinfo
 ui/vite.config.d.ts
 ui/vite.config.js
+
+# Project-local oh-my-pi state, caches and skills
+# (config.yml is committed: it pins the model for everyone in this repo)
+.omp/*
+!.omp/config.yml
