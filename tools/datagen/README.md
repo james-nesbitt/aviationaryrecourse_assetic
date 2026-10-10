@@ -12,14 +12,18 @@ only** — this tool is the sanctioned source of that data.
 | File | Entities |
 | `operators.jsonl` | passenger/cargo/military airline operators |
 | `orders.jsonl` | customer orders: charter passenger groups and cargo bookings with multi-transit itineraries |
-| `routes.jsonl` | planned carrier travel routes (ordered legs, scheduled times) |
+| `routes.jsonl` | recurring route patterns (ordered legs, frequency_days, first_operating_date) |
+| `trips.jsonl` | dated instances of a route: one execution with shifted legs, assigned vehicle and status |
+| `route_assignments.jsonl` | which vehicle operates a route over which date interval |
+| `vehicle_maintenance.jsonl` | aircraft service windows (a/b/c checks, unscheduled) |
+| `crew_assignments.jsonl` | which flight crew staffed which trip |
 | `vehicles.jsonl` | aircraft, ground support equipment, rail vehicles |
 | `ownership_history.jsonl` | sales/leases moving vehicles between operators |
-| `staff.jsonl` | flight crew, ground crew, and management (account managers, trip managers) |
+| `staff.jsonl` | flight crew, ground crew, and management (account managers, route managers); flight crew and management carry `keycloak_username` |
 | `facilities.jsonl` | hangars and warehouses |
 | `carrier_customers.jsonl` | customers: cargo shippers and charter passenger-group clients, each with a responsible account manager |
-| `cargo.jsonl` | shipments with origin/destination and assigned vehicle |
-| `passengers.jsonl` | passengers carried on charter and scheduled passenger flights |
+| `cargo.jsonl` | shipments booked onto a trip (`trip_id`, board/alight leg sequences) |
+| `passengers.jsonl` | passengers booked onto a trip (`trip_id`, board/alight leg sequences) |
 | `transit_events.jsonl` | unified per-subject state-transition event chains (transit_event log) |
 | `airports.jsonl` | the resolved airport reference set actually used |
 | `aircraft_models.jsonl` | the aircraft models actually referenced |
@@ -27,16 +31,32 @@ only** — this tool is the sanctioned source of that data.
 All records carry `schema_version: 1`. Every cross-file reference resolves
 within the output set.
 
-### Route semantics
+### Route and trip semantics
 
-Each route is one aircraft's planned operating-day itinerary for a passenger
-or cargo operator: an ordered list of 2–5 legs that starts and ends at the
-vehicle's base airport, scheduled 1–14 days after the anchor date. Leg
-airports are gated by the model's great-circle range (×0.9), departure times
-chain (each leg departs after the previous arrives plus a 45–120 min
-turnaround), and cargo-operator legs may reference an open shipment
-(`cargo_ref`) from `cargo.jsonl`. Military operators get no published
-routes.
+A **route** is a recurring pattern; a **trip** is one dated instance of it.
+
+Each route belongs to one aircraft of a passenger or cargo operator: an
+ordered list of 2–3 legs starting and ending at the vehicle's base airport,
+repeated every `frequency_days` (1, 2, 3 or 7) from `first_operating_date`.
+The legs carry the scheduled times of the first trip; later trips shift them
+by the difference in operating date. Leg airports are gated by the model's
+great-circle range capped at 2500 km, and departures chain with a 45–75 min
+turnaround, so one trip spans a single crew duty period (roughly 3–9 hours)
+rather than a multi-day rotation. Military operators get no published routes.
+
+Trips run from `first_operating_date` to the anchor plus 14 days. A trip's
+vehicle is whichever `route_assignment` interval covers its operating date,
+and its status is `cancelled` when that vehicle is inside a
+`vehicle_maintenance` window; otherwise `completed`, `in_progress` or
+`scheduled` according to where the anchor instant falls in its timetable.
+
+Assignments form a contiguous, non-overlapping chain per route: the first
+starts at `first_operating_date` with reason `initial`, the last is open, and
+vehicles change through `swap`, `maintenance_cover` and `maintenance_return`.
+
+Crew assignments staff non-cancelled passenger trips with one pilot and one
+cabin crew member drawn from the operating operator, never double-booking a
+crew member and leaving at least 11 hours between duties.
 
 ### Order semantics
 
@@ -47,13 +67,13 @@ routes published by the fulfilling operator when a temporally consistent,
 non-cyclic path exists (`transit_route_ids` records the contributing
 routes); otherwise a direct leg is planned on a plausible aircraft. Orders
 carry the responsible `account_manager_id` (the customer's assigned account
-manager) and `trip_manager_id` (the operator staff member who schedules
+manager) and `route_manager_id` (the operator staff member who schedules
 passenger/cargo assignment to flights), matching the assetic ABAC model.
 Charter orders have a `passenger_group` (group name + pax count) and may
 carry `accompanying_cargo_kg`; cargo orders have a `freight` block.
 
 Staff generation includes management roles (~15% of staff): `account_manager`
-(responsible for customer relationships) and `trip_manager` (schedules
+(responsible for customer relationships) and `route_manager` (schedules
 assignment of passengers/cargo to flights). Customers are ~25% charter
 clients, each with an assigned account manager at the contracted operator.
 

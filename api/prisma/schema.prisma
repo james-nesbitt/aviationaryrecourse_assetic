@@ -108,10 +108,12 @@ model Staff {
   role           String
   operatorId     String   @map("operator_id")
   baseIata       String   @map("base_iata") @db.Char(3)
+  dateOfBirth    DateTime @map("date_of_birth") @db.Date
   hireDate       DateTime @map("hire_date") @db.Date
   certifications Json     @default("[]")
   schemaVersion  Int      @default(1) @map("schema_version")
   generatedAt    DateTime @map("generated_at") @db.Date
+  keycloakUsername String? @unique @map("keycloak_username")
 
   operator       Operator @relation(fields: [operatorId], references: [operatorId])
 
@@ -161,7 +163,7 @@ model Cargo {
   originIata        String   @map("origin_iata") @db.Char(3)
   destinationIata   String   @map("destination_iata") @db.Char(3)
   assignedVehicleId String?  @map("assigned_vehicle_id")
-  operationId       String?  @map("operation_id")
+  tripId            String?  @map("trip_id")
   weightKg          Int      @map("weight_kg")
   cargoType         String   @map("cargo_type")
   validTime         DateTime @map("valid_time") @db.Date
@@ -232,7 +234,7 @@ model Passenger {
   familyName      String   @map("family_name")
   passengerType   String   @map("passenger_type")
   orderId         String?  @map("order_id")
-  operationId     String?  @map("operation_id")
+  tripId          String?  @map("trip_id")
   operatorId      String   @map("operator_id")
   originIata      String   @map("origin_iata") @db.Char(3)
   destinationIata String   @map("destination_iata") @db.Char(3)
@@ -276,8 +278,8 @@ model RouteAssignment {
   @@map("route_assignment")
 }
 
-model RouteOperation {
-  operationId    String   @id @map("operation_id")
+model Trip {
+  tripId         String   @id @map("trip_id")
   routeId        String   @map("route_id")
   vehicleId      String   @map("vehicle_id")
   operatorId     String   @map("operator_id")
@@ -285,12 +287,26 @@ model RouteOperation {
   status         String
   legs           Json
   schemaVersion  Int      @default(1) @map("schema_version")
-  generatedAt   DateTime @map("generated_at") @db.Date
+  generatedAt    DateTime @map("generated_at") @db.Date
 
   @@unique([routeId, operatingDate])
   @@index([vehicleId, operatingDate])
   @@index([operatorId, operatingDate])
-  @@map("route_operation")
+  @@map("trip")
+}
+
+model CrewAssignment {
+  assignmentId  String   @id @map("assignment_id")
+  tripId        String   @map("trip_id")
+  staffId       String   @map("staff_id")
+  crewRole      String   @map("crew_role")
+  schemaVersion Int      @default(1) @map("schema_version")
+  generatedAt   DateTime @map("generated_at") @db.Date
+
+  @@unique([tripId, staffId])
+  @@index([tripId])
+  @@index([staffId])
+  @@map("crew_assignment")
 }
 
 model TransitEvent {

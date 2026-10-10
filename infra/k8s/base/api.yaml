@@ -80,14 +80,16 @@ spec:
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/002_app_role.sql
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/003_journal_hash_function.sql
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/004_location_tracking.sql
-              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/005_route_operations.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/005_route_recurrence.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/006_trips_crew.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/007_staff_date_of_birth.sql
               echo "Migrations applied."
 
               # Load data from datagen JSONL
               echo "Loading synthetic data..."
               mkdir -p /data
               tar xzf /datagen/data.tar.gz -C /data
-              npx tsx src/scripts/load-jsonl.ts --dir /data 2>&1 || echo "Data load skipped (may already be loaded)"
+              npx tsx src/scripts/load-jsonl.ts --dir /data 2>&1
               echo "Data load complete."
           env:
             - name: DATABASE_URL
@@ -186,7 +188,7 @@ spec:
             name: assetic-api-source
         - name: migrations
           configMap:
-            name: assetic-db-migrations
+            name: assetic-db-migrations-v2
         - name: datagen
           configMap:
             name: assetic-datagen-data

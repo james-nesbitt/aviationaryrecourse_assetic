@@ -1,14 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { handleCallback } from "../lib/auth.js";
+import { getUser, handleCallback } from "../lib/auth.js";
+import { apiGet, type Me } from "../lib/api.js";
+import { landingPath } from "../AppLayout.js";
 import { useNavigate } from "react-router-dom";
 
 export function CallbackView(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // After the token exchange, send the user to their own workspace: the admin
+  // panel, a role dashboard, or their personal schedule when the account is
+  // linked to a staff record.
   useEffect(() => {
     handleCallback()
-      .then(() => navigate("/"))
+      .then(async () => {
+        const roles = getUser()?.roles ?? [];
+        const me = await apiGet<Me>("/api/me").catch(() => null);
+        navigate(landingPath(roles, Boolean(me?.staff)), { replace: true });
+      })
       .catch((e) => setError(String(e)));
   }, [navigate]);
 

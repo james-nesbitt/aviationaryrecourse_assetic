@@ -15,7 +15,7 @@
       "protocol": "openid-connect",
       "publicClient": true,
       "standardFlowEnabled": true,
-      "directAccessGrantsEnabled": false,
+      "directAccessGrantsEnabled": true,
       "redirectUris": [
         "https://assetic.home.arpa/callback",
         "http://assetic.home.arpa/callback",
@@ -49,60 +49,203 @@
   ],
   "roles": {
     "realm": [
-      { "name": "asset_manager", "description": "Manage asset masters, fleet config" },
-      { "name": "account_manager", "description": "Manage customers and contracts" },
-      { "name": "trip_manager", "description": "Manage trips and dispatches" },
-      { "name": "maintenance", "description": "Manage maintenance records" },
-      { "name": "loading_team", "description": "Manage cargo loading and custody" },
-      { "name": "on_board_staff", "description": "On-board operations" },
-      { "name": "analytics", "description": "Read-only analytics access" },
-      { "name": "sysadmin", "description": "System administration (no domain PII)" }
+      {
+        "name": "asset_manager",
+        "description": "Manage asset masters, fleet config"
+      },
+      {
+        "name": "account_manager",
+        "description": "Manage customers and contracts"
+      },
+      {
+        "name": "route_manager",
+        "description": "Manage routes, vehicle assignments and crew"
+      },
+      {
+        "name": "maintenance",
+        "description": "Manage maintenance records"
+      },
+      {
+        "name": "loading_team",
+        "description": "Manage cargo loading and custody"
+      },
+      {
+        "name": "on_board_staff",
+        "description": "On-board operations"
+      },
+      {
+        "name": "analytics",
+        "description": "Read-only analytics access"
+      },
+      {
+        "name": "sysadmin",
+        "description": "System administration (no domain PII)"
+      },
+      {
+        "name": "crew",
+        "description": "Flight crew self-service (own trips and fatigue)"
+      }
     ]
   },
   "users": [
     {
       "username": "admin",
       "enabled": true,
-      "email": "admin@assetic.local",
+      "email": "admin@demo.assetic.invalid",
       "firstName": "Admin",
       "lastName": "User",
       "credentials": [
-        { "type": "password", "value": "admin", "temporary": false }
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": true
+        }
       ],
-      "realmRoles": ["asset_manager", "account_manager", "trip_manager", "sysadmin"]
+      "realmRoles": [
+        "asset_manager",
+        "account_manager",
+        "route_manager",
+        "sysadmin",
+        "maintenance",
+        "crew"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "tripmgr",
       "enabled": true,
-      "email": "tripmgr@assetic.local",
+      "email": "tripmgr@demo.assetic.invalid",
       "firstName": "Trip",
       "lastName": "Manager",
       "credentials": [
-        { "type": "password", "value": "tripmgr", "temporary": false }
+        {
+          "type": "password",
+          "value": "tripmgr",
+          "temporary": true
+        }
       ],
-      "realmRoles": ["trip_manager"]
+      "realmRoles": [
+        "route_manager"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "loader",
       "enabled": true,
-      "email": "loader@assetic.local",
+      "email": "loader@demo.assetic.invalid",
       "firstName": "Loading",
       "lastName": "Operator",
       "credentials": [
-        { "type": "password", "value": "loader", "temporary": false }
+        {
+          "type": "password",
+          "value": "loader",
+          "temporary": true
+        }
       ],
-      "realmRoles": ["loading_team"]
+      "realmRoles": [
+        "loading_team"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     },
     {
       "username": "viewer",
       "enabled": true,
-      "email": "viewer@assetic.local",
+      "email": "viewer@demo.assetic.invalid",
       "firstName": "Read",
       "lastName": "Only",
       "credentials": [
-        { "type": "password", "value": "viewer", "temporary": false }
+        {
+          "type": "password",
+          "value": "viewer",
+          "temporary": true
+        }
       ],
-      "realmRoles": ["analytics"]
+      "realmRoles": [
+        "analytics"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
+    },
+    {
+      "username": "maintmgr",
+      "enabled": true,
+      "email": "maintmgr@demo.assetic.invalid",
+      "firstName": "Maintenance",
+      "lastName": "Manager",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "maintmgr",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "maintenance"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
+    },
+    {
+      "username": "n.cabin_crew-0007",
+      "enabled": true,
+      "email": "n.cabin_crew-0007@demo.assetic.invalid",
+      "firstName": "Nadia",
+      "lastName": "Tanaka",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "n.cabin_crew-0007",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "crew"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
+    },
+    {
+      "username": "m.route_manager-0002",
+      "enabled": true,
+      "email": "m.route_manager-0002@demo.assetic.invalid",
+      "firstName": "Mara",
+      "lastName": "Sorensen",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "m.route_manager-0002",
+          "temporary": true
+        }
+      ],
+      "realmRoles": [
+        "route_manager"
+      ],
+      "attributes": {
+        "demo-account": [
+          "true"
+        ]
+      }
     }
   ]
 }

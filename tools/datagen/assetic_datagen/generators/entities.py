@@ -2,7 +2,7 @@
 
 Generation order matters: later generators reference entities produced by
 earlier ones (operators → vehicles → ownership → staff → facilities →
-customers → routes → maintenance → assignments → operations → cargo →
+customers → routes → maintenance → assignments → trips → crew → cargo →
 orders → passengers → transit events).
 """
 
@@ -17,9 +17,26 @@ from ..rng import anchor_instant, iso, random_date_in_window, window_start
 
 SCHEMA_VERSION = 1
 
-# How far past the anchor the future horizon extends: operations,
-# maintenance windows and assignments are generated up to anchor + FUTURE_DAYS.
+# How far past the anchor the future horizon extends: trips, crew
+# assignments, maintenance windows and assignments are generated up to
+# anchor + FUTURE_DAYS.
 FUTURE_DAYS = 14
+
+# Minimum and maximum age at which each role is hired. Captains and leads carry
+# command experience so they enter later; ramp roles enter earliest. Used to
+# derive each staff member's date of birth from their hire date.
+HIRE_AGE_BANDS: dict[str, tuple[int, int]] = {
+    "captain": (28, 52),
+    "first_officer": (22, 42),
+    "cabin_lead": (26, 48),
+    "cabin_crew": (20, 40),
+    "maintenance_tech": (22, 52),
+    "ramp_agent": (19, 45),
+    "baggage_handler": (19, 45),
+    "fueler": (19, 45),
+    "account_manager": (26, 52),
+    "route_manager": (26, 52),
+}
 
 # Registration prefixes plausible for each operator home country.
 _REG_PREFIX_BY_COUNTRY = {
@@ -252,7 +269,7 @@ def generate_staff(
 ) -> list[dict[str, Any]]:
     flight_roles = ["captain", "first_officer", "cabin_lead", "cabin_crew"]
     ground_roles = ["ramp_agent", "baggage_handler", "maintenance_tech", "fueler"]
-    management_roles = ["account_manager", "trip_manager"]
+    management_roles = ["account_manager", "route_manager"]
     passenger_ops = [op for op in operators if op["type"] in ("passenger", "military")]
 
     staff: list[dict[str, Any]] = []
@@ -273,19 +290,39 @@ def generate_staff(
             op = rng.choice(operators)
             role = rng.choice(ground_roles)
         certs = rng.sample(pools["certifications_by_role"][role], k=rng.randint(2, min(4, len(pools["certifications_by_role"][role]))))
-        staff.append({
-            "staff_id": ids.next("sta"),
-            "given_name": rng.choice(pools["given_names"]),
-            "family_name": rng.choice(pools["family_names"]),
+        given = rng.choice(pools["given_names"])
+        family = rng.choice(pools["family_names"])
+        staff_id = ids.next("sta")
+        hire_date = random_date_in_window(rng, window_start(anchor, window_days), anchor)
+        # Date of birth is derived backwards from the hire date using the role's
+        # minimum entry age, so the dataset can never hire someone below it. Age
+        # itself is not stored: it is a function of the instant you ask, and the
+        # dataset is read at a fixed anchor.
+        low, high = HIRE_AGE_BANDS[role]
+        age_at_hire = rng.randint(low, high)
+        date_of_birth = hire_date - dt.timedelta(
+            days=round(age_at_hire * 365.25) + rng.randint(0, 364)
+        )
+        rec = {
+            "staff_id": staff_id,
+            "given_name": given,
+            "family_name": family,
             "role_class": role_class,
             "role": role,
             "operator_id": op["operator_id"],
             "base_iata": _airport_near(rng, airports, op["hub_iata"])["iata"],
-            "hire_date": iso(random_date_in_window(rng, window_start(anchor, window_days), anchor)),
+            "date_of_birth": iso(date_of_birth),
+            "hire_date": iso(hire_date),
             "certifications": sorted(certs),
             "schema_version": SCHEMA_VERSION,
             "generated_at": iso(anchor),
-        })
+        }
+        if role_class in ("flight_crew", "management"):
+            # deterministic identity link for the Keycloak demo users
+            rec["keycloak_username"] = (
+                f"{given[0].lower()}.{role}-{staff_id.split('-')[1]}"
+            )
+        staff.append(rec)
     return staff
 
 
@@ -369,7 +406,7 @@ def generate_routes(
 
     A route is an operator's recurring itinerary pattern for one aircraft
     vehicle: an ordered list of legs (airport pair + the scheduled times of
-    the FIRST operation), anchored at the vehicle's base airport. Legs
+    the FIRST trip), anchored at the vehicle's base airport. Legs
     chain (leg i arrival airport = leg i+1 departure airport) and the
     route returns to base. The route operates every ``frequency_days``
     starting at ``first_operating_date``; dated executions live in
@@ -401,14 +438,16 @@ def generate_routes(
         used.add(veh["vehicle_id"])
         model = model_by_id.get(veh["model_id"], {})
         base = veh["base_iata"]
-        # 2-5 legs; route starts and ends at the vehicle's base
-        n_legs = rng.randint(2, 5)
+        # 2-3 legs; route starts and ends at the vehicle's base. Legs and
+        # sector length are capped so one trip is one crew duty period
+        # (~8-14h) rather than a multi-day rotation.
+        n_legs = rng.randint(2, 3)
         stops = [base]
         chosen = {base}
         pool = [a["iata"] for a in airports if a["iata"] != base]
-        # model range gates which airports are reachable from the current stop
+        # model range gates reachability, capped so a sector stays under ~3.5h
         range_km = model.get("range_km", 3000)
-        limit = range_km * 0.9
+        limit = min(range_km * 0.9, 2500)
         while len(stops) < n_legs:
             current = stops[-1]
             reachable = [iata for iata in pool
@@ -443,7 +482,7 @@ def generate_routes(
                 "scheduled_departure": dep.isoformat(),
                 "scheduled_arrival": arr.isoformat(),
             })
-            dep = arr + dt.timedelta(minutes=rng.randint(45, 120))  # turnaround
+            dep = arr + dt.timedelta(minutes=rng.randint(45, 75))  # turnaround
         routes.append({
             "route_id": ids.next("rte"),
             "operator_id": op["operator_id"],
@@ -542,7 +581,7 @@ def generate_route_assignments(
     open (``valid_to`` is null). Vehicles occasionally swap routes within
     an operator; when a vehicle enters maintenance, another aircraft of
     the same operator covers the affected interval, otherwise the
-    overlapping operations are cancelled.
+    overlapping trips are cancelled.
     """
     first_by_route = {rt["route_id"]: dt.date.fromisoformat(rt["first_operating_date"]) for rt in routes}
     # internal segment representation: {vehicle_id, start, end, reason, replaces}
@@ -630,7 +669,7 @@ def generate_route_assignments(
                     and not busy_with_maintenance(v["vehicle_id"], o_start, o_end)
                 ]
                 if not candidates:
-                    continue  # no cover available: operations will be cancelled
+                    continue  # no cover available: trips will be cancelled
                 preferred = [vid for vid in candidates if not holds_segment(vid, o_start, o_end)]
                 cover = rng.choice(preferred or candidates)
                 replacement: list[dict[str, Any]] = []
@@ -674,14 +713,14 @@ def generate_route_assignments(
     return records
 
 
-def generate_route_operations(
+def generate_trips(
     ids: IdAssigner, routes: list[dict[str, Any]],
     assignments: list[dict[str, Any]], maintenance: list[dict[str, Any]],
     anchor: dt.date,
 ) -> list[dict[str, Any]]:
-    """One dated execution per route every ``frequency_days`` days.
+    """One dated trip per route every ``frequency_days`` days.
 
-    Fully determined by its inputs: each operation's legs are the route
+    Fully determined by its inputs: each trip's legs are the route
     legs shifted to the operating date, its vehicle is the assignment
     active that day, and its status is derived from the anchor instant —
     or ``cancelled`` when the assigned vehicle is in maintenance that day
@@ -696,9 +735,9 @@ def generate_route_operations(
     for w in maintenance:
         windows_by_vehicle.setdefault(w["vehicle_id"], []).append(w)
 
-    operations: list[dict[str, Any]] = []
+    trips: list[dict[str, Any]] = []
     for rt in routes:
-        first = first_op_date = dt.date.fromisoformat(rt["first_operating_date"])
+        first = first_trip_date = dt.date.fromisoformat(rt["first_operating_date"])
         segs = by_route.get(rt["route_id"], [])
         d = first
         while d <= horizon:
@@ -728,8 +767,8 @@ def generate_route_operations(
                     status = "in_progress"
                 else:
                     status = "scheduled"
-            operations.append({
-                "operation_id": ids.next("rop"),
+            trips.append({
+                "trip_id": ids.next("trp"),
                 "route_id": rt["route_id"],
                 "vehicle_id": vehicle_id,
                 "operator_id": rt["operator_id"],
@@ -740,7 +779,101 @@ def generate_route_operations(
                 "generated_at": iso(anchor),
             })
             d += dt.timedelta(days=rt["frequency_days"])
-    return operations
+    return trips
+
+
+def generate_crew_assignments(
+    rng: random.Random, ids: IdAssigner, trips: list[dict[str, Any]],
+    routes: list[dict[str, Any]], staff: list[dict[str, Any]],
+    anchor: dt.date, window_days: int,
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Crew staffing per trip: one pilot + one cabin crew member.
+
+    Non-cancelled passenger-type trips departing after the anchor minus
+    the crew pool of the trip's operator get 2 crew (1 captain or
+    first_officer + 1 cabin_lead or cabin_crew), drawn round-robin so the
+    load spreads. A deliberately overloaded pilot subset (the first
+    pilot of each operator takes a large fraction of pilot slots) makes
+    the fatigue metrics interesting. Cargo trips get no crew this phase.
+    ``crew_by_trip`` maps each crewed trip_id -> [staff_id, staff_id] and
+    is returned alongside the records so downstream generators draw
+    flight actors from the actual crew.
+    """
+    pilots_by_op: dict[str, list[dict[str, Any]]] = {}
+    cabin_by_op: dict[str, list[dict[str, Any]]] = {}
+    for s in staff:
+        if s["role_class"] != "flight_crew":
+            continue
+        if s["role"] in ("captain", "first_officer"):
+            pilots_by_op.setdefault(s["operator_id"], []).append(s)
+        elif s["role"] in ("cabin_lead", "cabin_crew"):
+            cabin_by_op.setdefault(s["operator_id"], []).append(s)
+
+    # round-robin cursors per operator pool, plus the busy intervals each
+    # staff member already holds (a crew member cannot be on two
+    # overlapping trips, and needs a minimum rest gap between duties)
+    pilot_cursor: dict[str, int] = {}
+    cabin_cursor: dict[str, int] = {}
+    busy: dict[str, list[tuple[dt.datetime, dt.datetime]]] = {}
+    MIN_REST = dt.timedelta(hours=11)
+
+    def available(staff_id: str, dep: dt.datetime, arr: dt.datetime) -> bool:
+        for b_dep, b_arr in busy.get(staff_id, ()):
+            if dep < b_arr + MIN_REST and b_dep < arr + MIN_REST:
+                return False
+        return True
+
+    def book(staff_id: str, dep: dt.datetime, arr: dt.datetime) -> None:
+        busy.setdefault(staff_id, []).append((dep, arr))
+
+    def pick(pool: list[dict[str, Any]] | None, cursor: dict[str, int],
+             op_id: str, dep: dt.datetime, arr: dt.datetime,
+             overload: bool) -> dict[str, Any] | None:
+        if not pool:
+            return None
+        # overloaded subset: the first member of the pool gets first refusal
+        # on most trips, so a few crew accumulate heavy (but legal) rosters
+        if overload and rng.random() < 0.42:
+            order = list(pool)
+        else:
+            i = cursor.get(op_id, 0)
+            cursor[op_id] = i + 1
+            k = i % len(pool)
+            order = pool[k:] + pool[:k]
+        for member in order:
+            if available(member["staff_id"], dep, arr):
+                return member
+        return None
+
+    records: list[dict[str, Any]] = []
+    crew_by_trip: dict[str, list[str]] = {}
+    route_type_by_id = {r["route_id"]: r["route_type"] for r in routes}
+    for trip in trips:
+        if trip["status"] == "cancelled":
+            continue
+        if route_type_by_id.get(trip["route_id"]) != "passenger":
+            continue
+        first_dep = dt.datetime.fromisoformat(trip["legs"][0]["scheduled_departure"])
+        last_arr = dt.datetime.fromisoformat(trip["legs"][-1]["scheduled_arrival"])
+        if first_dep < anchor_instant(anchor) - dt.timedelta(days=window_days):
+            continue  # trips before the generation window are not staffed
+        op_id = trip["operator_id"]
+        pilot = pick(pilots_by_op.get(op_id), pilot_cursor, op_id, first_dep, last_arr, True)
+        cabin = pick(cabin_by_op.get(op_id), cabin_cursor, op_id, first_dep, last_arr, False)
+        for member in (pilot, cabin):
+            if member is None:
+                continue
+            book(member["staff_id"], first_dep, last_arr)
+            records.append({
+                "assignment_id": ids.next("crg"),
+                "trip_id": trip["trip_id"],
+                "staff_id": member["staff_id"],
+                "crew_role": member["role"],
+                "schema_version": SCHEMA_VERSION,
+                "generated_at": iso(anchor),
+            })
+            crew_by_trip.setdefault(trip["trip_id"], []).append(member["staff_id"])
+    return records, crew_by_trip
 
 
 def _choose_span(rng: random.Random, legs: list[dict[str, Any]]) -> tuple[int, int]:
@@ -754,32 +887,32 @@ def _choose_span(rng: random.Random, legs: list[dict[str, Any]]) -> tuple[int, i
 
 
 def generate_cargo(
-    rng: random.Random, ids: IdAssigner, operations: list[dict[str, Any]],
+    rng: random.Random, ids: IdAssigner, trips: list[dict[str, Any]],
     routes: list[dict[str, Any]], operators: list[dict[str, Any]],
     customers: list[dict[str, Any]], n: int, anchor: dt.date,
 ) -> list[dict[str, Any]]:
-    """Cargo shipments booked onto concrete cargo-route operations.
+    """Cargo shipments booked onto concrete cargo-route trips.
 
-    Each shipment rides one non-cancelled operation from a board leg to an
+    Each shipment rides one non-cancelled trip from a board leg to an
     alight leg, inheriting the operating vehicle and leg timetable. The
     customer prefers cargo shippers of the same operator. ``status`` is
     the oracle derived by the transit-event generator; board/alight leg
     sequences are generation provenance (JSONL only, not loaded).
     """
     route_type_by_id = {r["route_id"]: r["route_type"] for r in routes}
-    bookable = [o for o in operations
+    bookable = [o for o in trips
                 if o["status"] != "cancelled" and route_type_by_id[o["route_id"]] == "cargo"]
     if not bookable:
-        raise SystemExit("datagen: no bookable cargo-operator route operations; increase --num-routes or --num-vehicles")
+        raise SystemExit("datagen: no bookable cargo-operator route trips; increase --num-routes or --num-vehicles")
 
     shipments: list[dict[str, Any]] = []
     for _ in range(n):
-        op = rng.choice(bookable)
-        i, j = _choose_span(rng, op["legs"])
-        legs = op["legs"]
+        trip = rng.choice(bookable)
+        i, j = _choose_span(rng, trip["legs"])
+        legs = trip["legs"]
         origin = legs[i - 1]["from_iata"]
         dest = legs[j - 1]["to_iata"]
-        operator_id = op["operator_id"]
+        operator_id = trip["operator_id"]
         pool = [c for c in customers
                 if c["operator_id"] == operator_id and c["customer_type"] == "cargo_shipper"]
         if not pool:
@@ -791,8 +924,8 @@ def generate_cargo(
             "operator_id": operator_id,
             "origin_iata": origin,
             "destination_iata": dest,
-            "assigned_vehicle_id": op["vehicle_id"],
-            "operation_id": op["operation_id"],
+            "assigned_vehicle_id": trip["vehicle_id"],
+            "trip_id": trip["trip_id"],
             "board_leg_sequence": i,
             "alight_leg_sequence": j,
             "weight_kg": rng.randint(50, 20000),
@@ -801,7 +934,7 @@ def generate_cargo(
                 weights=[55, 15, 10, 10, 10],
             )[0],
             "status": None,  # oracle: set by the transit-event generator
-            "valid_time": iso(dt.date.fromisoformat(op["operating_date"]) - dt.timedelta(days=rng.randint(1, 21))),
+            "valid_time": iso(dt.date.fromisoformat(trip["operating_date"]) - dt.timedelta(days=rng.randint(1, 21))),
             "schema_version": SCHEMA_VERSION,
             "generated_at": iso(anchor),
         })
@@ -821,7 +954,7 @@ def _great_circle_km(a: dict[str, Any], b: dict[str, Any]) -> float:
 
 def generate_orders(
     rng: random.Random, ids: IdAssigner, pools: dict[str, Any],
-    customers: list[dict[str, Any]], operations: list[dict[str, Any]],
+    customers: list[dict[str, Any]], trips: list[dict[str, Any]],
     staff: list[dict[str, Any]], aircraft_by_model: dict[str, list[dict[str, Any]]] | None,
     airports: list[dict[str, Any]], models: list[dict[str, Any]],
     n: int, anchor: dt.date, window_days: int,
@@ -831,25 +964,25 @@ def generate_orders(
     An order is a customer request to move people and/or freight from an
     origin to a destination, which may require multiple transits/flights.
     The generated itinerary chains legs from the operator's non-cancelled
-    route operations (matching airports) when possible, producing
-    multi-transit itineraries; otherwise it plans direct legs on plausible
-    aircraft. Each order carries a responsible account manager (from the
-    customer's assignment) and the trip manager at the fulfilling operator
-    who schedules the assignment.
+    route trips (matching airports) when possible, producing multi-transit
+    itineraries; otherwise it plans direct legs on plausible aircraft. Each
+    order carries a responsible account manager (from the customer's
+    assignment) and the route manager at the fulfilling operator who
+    schedules the assignment.
     """
     airport_by_iata = {a["iata"]: a for a in airports}
-    # (operation, leg) pairs by operator and departure airport
+    # (trip, leg) pairs by operator and departure airport
     legs_by_op_from: dict[str, dict[str, list[tuple[dict[str, Any], dict[str, Any]]]]] = {}
-    for o in operations:
+    for o in trips:
         if o["status"] == "cancelled":
             continue
         by_from = legs_by_op_from.setdefault(o["operator_id"], {})
         for leg in o["legs"]:
             by_from.setdefault(leg["from_iata"], []).append((o, leg))
-    trip_managers_by_op: dict[str, list[str]] = {}
+    route_managers_by_op: dict[str, list[str]] = {}
     for s in staff:
-        if s["role"] == "trip_manager":
-            trip_managers_by_op.setdefault(s["operator_id"], []).append(s["staff_id"])
+        if s["role"] == "route_manager":
+            route_managers_by_op.setdefault(s["operator_id"], []).append(s["staff_id"])
     pax_models = [m for m in models if m["pax_capacity_typical"] > 0]
     cargo_models = [m for m in models if m["cargo_capacity_kg"] > 0]
 
@@ -861,11 +994,11 @@ def generate_orders(
         origin, dest = rng.sample(airports, 2)
         order_date = random_date_in_window(rng, window_start(anchor, window_days), anchor)
 
-        # itinerary: chain operation legs (multi-transit) or plan direct legs
+        # itinerary: chain trip legs (multi-transit) or plan direct legs
         transit_ids: list[str] = []
         planned_legs: list[dict[str, Any]] = []
         legs_by_from = legs_by_op_from.get(op_id, {})
-        # walk the operator's operations from origin toward dest, chaining
+        # walk the operator's trips from origin toward dest, chaining
         # legs; only legs departing after the previous arrival are chained,
         # and no airport is visited twice, so itineraries are temporally
         # consistent and non-cyclic.
@@ -883,16 +1016,16 @@ def generate_orders(
                 break
             # prefer a leg heading to dest; otherwise any onward leg
             toward_dest = [m for m in matching if m[1]["to_iata"] == dest["iata"]]
-            operation, leg = rng.choice(toward_dest or matching)
-            if operation["route_id"] not in transit_ids:
-                transit_ids.append(operation["route_id"])
+            trip, leg = rng.choice(toward_dest or matching)
+            if trip["route_id"] not in transit_ids:
+                transit_ids.append(trip["route_id"])
             planned_legs.append({
                 "leg_sequence": len(planned_legs) + 1,
                 "from_iata": leg["from_iata"],
                 "to_iata": leg["to_iata"],
                 "scheduled_departure": leg["scheduled_departure"],
                 "scheduled_arrival": leg["scheduled_arrival"],
-                "operation_id": operation["operation_id"],
+                "trip_id": trip["trip_id"],
             })
             visited.add(leg["to_iata"])
             last_arrival = dt.datetime.fromisoformat(leg["scheduled_arrival"])
@@ -900,7 +1033,7 @@ def generate_orders(
             hops += 1
         if cursor != dest["iata"]:
             # chain could not reach the destination within the hop limit
-            # (or no chainable operations): close the gap with a final direct leg
+            # (or no chainable trips): close the gap with a final direct leg
             pool = pax_models if is_charter else cargo_models
             model = rng.choice(pool)
             if planned_legs:
@@ -925,7 +1058,7 @@ def generate_orders(
             "operator_id": op_id,
             "order_type": "charter_passenger" if is_charter else "cargo",
             "account_manager_id": customer.get("account_manager_id"),
-            "trip_manager_id": rng.choice(trip_managers_by_op[op_id]) if trip_managers_by_op.get(op_id) else None,
+            "route_manager_id": rng.choice(route_managers_by_op[op_id]) if route_managers_by_op.get(op_id) else None,
             "origin_iata": origin["iata"],
             "destination_iata": dest["iata"],
             "planned_legs": planned_legs,
@@ -954,33 +1087,33 @@ def generate_orders(
     return orders
 def generate_passengers(
     rng: random.Random, ids: IdAssigner, pools: dict[str, Any],
-    orders: list[dict[str, Any]], operations: list[dict[str, Any]],
+    orders: list[dict[str, Any]], trips: list[dict[str, Any]],
     routes: list[dict[str, Any]], operators: list[dict[str, Any]],
     n: int, anchor: dt.date,
 ) -> list[dict[str, Any]]:
-    """Passenger records booked onto concrete passenger-route operations.
+    """Passenger records booked onto concrete passenger-route trips.
 
     Charter-passenger orders materialize 2-3 passengers each (linked by
-    ``order_id``), riding the operation of the order's first operation-
-    backed planned leg. The remaining budget up to ``n`` is filled with
+    ``order_id``), riding the trip of the order's first trip-backed
+    planned leg. The remaining budget up to ``n`` is filled with
     standalone bookings round-robin over the operators that have bookable
-    passenger operations. Passengers ride through: board at the origin
+    passenger trips. Passengers ride through: board at the origin
     leg, arrive at the destination leg, no intermediate events. The
     ``status`` oracle is derived by the transit-event generator;
     board/alight leg sequences are generation provenance.
     """
     route_type_by_id = {r["route_id"]: r["route_type"] for r in routes}
-    bookable_pax = [o for o in operations
+    bookable_pax = [o for o in trips
                     if o["status"] != "cancelled" and route_type_by_id[o["route_id"]] == "passenger"]
     if not bookable_pax:
-        raise SystemExit("datagen: no bookable passenger-operator route operations; increase --num-routes or --num-vehicles")
-    ops_by_id = {o["operation_id"]: o for o in operations}
+        raise SystemExit("datagen: no bookable passenger-operator route trips; increase --num-routes or --num-vehicles")
+    trips_by_id = {o["trip_id"]: o for o in trips}
     by_op: dict[str, list[dict[str, Any]]] = {}
     for o in bookable_pax:
         by_op.setdefault(o["operator_id"], []).append(o)
 
-    def make(order_id: str | None, op: dict[str, Any], i: int, j: int) -> dict[str, Any]:
-        legs = op["legs"]
+    def make(order_id: str | None, trip: dict[str, Any], i: int, j: int) -> dict[str, Any]:
+        legs = trip["legs"]
         return {
             "passenger_id": ids.next("pax"),
             "given_name": rng.choice(pools["given_names"]),
@@ -989,14 +1122,14 @@ def generate_passengers(
                 ["adult", "child", "infant"], weights=[80, 15, 5],
             )[0],
             "order_id": order_id,
-            "operator_id": op["operator_id"],
+            "operator_id": trip["operator_id"],
             "origin_iata": legs[i - 1]["from_iata"],
             "destination_iata": legs[j - 1]["to_iata"],
-            "operation_id": op["operation_id"],
+            "trip_id": trip["trip_id"],
             "board_leg_sequence": i,
             "alight_leg_sequence": j,
             "status": None,  # oracle: set by the transit-event generator
-            "valid_time": iso(dt.date.fromisoformat(op["operating_date"]) - dt.timedelta(days=rng.randint(1, 30))),
+            "valid_time": iso(dt.date.fromisoformat(trip["operating_date"]) - dt.timedelta(days=rng.randint(1, 30))),
             "schema_version": SCHEMA_VERSION,
             "generated_at": iso(anchor),
         }
@@ -1011,41 +1144,41 @@ def generate_passengers(
         group = order.get("passenger_group") or {}
         # never materialize more passengers than the booked group holds
         k = min(group.get("pax_count", 3), rng.randint(2, 3), n - len(passengers))
-        # ride the operation of the first operation-backed planned leg,
-        # from that leg through the last consecutive leg of the same operation
-        op_id = next((pl.get("operation_id") for pl in order["planned_legs"] if pl.get("operation_id")), None)
-        if op_id is not None and op_id in ops_by_id:
-            op = ops_by_id[op_id]
-            op_legs = op["legs"]
+        # ride the trip of the first trip-backed planned leg,
+        # from that leg through the last consecutive leg of the same trip
+        trip_id = next((pl.get("trip_id") for pl in order["planned_legs"] if pl.get("trip_id")), None)
+        if trip_id is not None and trip_id in trips_by_id:
+            trip = trips_by_id[trip_id]
+            trip_legs = trip["legs"]
             start_idx = next(
-                (idx for idx, lg in enumerate(op_legs, start=1)
+                (idx for idx, lg in enumerate(trip_legs, start=1)
                  if any(pl["from_iata"] == lg["from_iata"] and pl["to_iata"] == lg["to_iata"]
-                        for pl in order["planned_legs"] if pl.get("operation_id") == op_id)),
+                        for pl in order["planned_legs"] if pl.get("trip_id") == trip_id)),
                 1,
             )
-            op_refs = [pl for pl in order["planned_legs"] if pl.get("operation_id") == op_id]
+            trip_refs = [pl for pl in order["planned_legs"] if pl.get("trip_id") == trip_id]
             last_leg = next(
-                (lg for lg in reversed(op_legs)
-                 if any(pl["from_iata"] == lg["from_iata"] and pl["to_iata"] == lg["to_iata"] for pl in op_refs)),
-                op_legs[start_idx - 1],
+                (lg for lg in reversed(trip_legs)
+                 if any(pl["from_iata"] == lg["from_iata"] and pl["to_iata"] == lg["to_iata"] for pl in trip_refs)),
+                trip_legs[start_idx - 1],
             )
-            j = next(idx for idx, lg in enumerate(op_legs, start=1) if lg is last_leg)
+            j = next(idx for idx, lg in enumerate(trip_legs, start=1) if lg is last_leg)
             i, j = start_idx, max(start_idx, j)
         else:
-            op = rng.choice(by_op.get(order["operator_id"]) or bookable_pax)
-            i, j = _choose_span(rng, op["legs"])
+            trip = rng.choice(by_op.get(order["operator_id"]) or bookable_pax)
+            i, j = _choose_span(rng, trip["legs"])
         for _ in range(k):
-            passengers.append(make(order["order_id"], op, i, j))
+            passengers.append(make(order["order_id"], trip, i, j))
 
-    # standalone fill: round-robin over operators with bookable operations
-    pax_ops_with_ops = sorted(by_op)
+    # standalone fill: round-robin over operators with bookable trips
+    pax_ops_with_trips = sorted(by_op)
     oi = 0
-    while pax_ops_with_ops and len(passengers) < n:
-        op_id = pax_ops_with_ops[oi % len(pax_ops_with_ops)]
+    while pax_ops_with_trips and len(passengers) < n:
+        op_id = pax_ops_with_trips[oi % len(pax_ops_with_trips)]
         oi += 1
-        op = rng.choice(by_op[op_id])
-        i, j = _choose_span(rng, op["legs"])
-        passengers.append(make(None, op, i, j))
+        trip = rng.choice(by_op[op_id])
+        i, j = _choose_span(rng, trip["legs"])
+        passengers.append(make(None, trip, i, j))
     return passengers
 
 
@@ -1079,13 +1212,14 @@ def _warehouses_by_airport(facilities: list[dict[str, Any]]) -> dict[str, list[s
 def generate_transit_events(
     rng: random.Random, ids: IdAssigner,
     cargo: list[dict[str, Any]], passengers: list[dict[str, Any]],
-    operations: list[dict[str, Any]], facilities: list[dict[str, Any]],
+    trips: list[dict[str, Any]], facilities: list[dict[str, Any]],
     staff: list[dict[str, Any]], anchor: dt.date,
+    crew_by_trip: dict[str, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Unified state-transition events for cargo and passengers.
 
     One ``transit_event`` chain per subject, built from the booked
-    operation's leg timetable: cargo emits per-leg depart/arrive (with
+    trip's leg timetable: cargo emits per-leg depart/arrive (with
     optional warehouse holds at intermediate stops), passengers ride
     through from board leg to alight leg. Only events at or before the
     anchor instant are emitted; the subject's oracle ``status`` in
@@ -1096,7 +1230,7 @@ def generate_transit_events(
     continuity is asserted here.
     """
     now = anchor_instant(anchor)
-    ops_by_id = {o["operation_id"]: o for o in operations}
+    trips_by_id = {o["trip_id"]: o for o in trips}
     warehouses_by_airport = _warehouses_by_airport(facilities)
     ground_crew_by_op = _ground_crew_by_op(staff)
     flight_crew_by_op = _flight_crew_by_op(staff)
@@ -1148,11 +1282,11 @@ def generate_transit_events(
 
     # -------------------------------------------------------------- cargo --
     for rec in cargo:
-        op = ops_by_id[rec["operation_id"]]
-        legs = op["legs"]
+        trip = trips_by_id[rec["trip_id"]]
+        legs = trip["legs"]
         i, j = rec["board_leg_sequence"], rec["alight_leg_sequence"]
-        veh = op["vehicle_id"]
-        g = ground_actor(op["operator_id"])
+        veh = trip["vehicle_id"]
+        g = ground_actor(trip["operator_id"])
         dep_k = [dt.datetime.fromisoformat(lg["scheduled_departure"]) for lg in legs]
         arr_k = [dt.datetime.fromisoformat(lg["scheduled_arrival"]) for lg in legs]
 
@@ -1194,12 +1328,13 @@ def generate_transit_events(
 
     # --------------------------------------------------------- passenger --
     for pax in passengers:
-        op = ops_by_id[pax["operation_id"]]
-        legs = op["legs"]
+        trip = trips_by_id[pax["trip_id"]]
+        legs = trip["legs"]
         i, j = pax["board_leg_sequence"], pax["alight_leg_sequence"]
-        veh = op["vehicle_id"]
-        g = ground_actor(op["operator_id"])
-        f = flight_actor(op["operator_id"])
+        veh = trip["vehicle_id"]
+        g = ground_actor(trip["operator_id"])
+        trip_crew = (crew_by_trip or {}).get(trip["trip_id"])
+        f = rng.choice(trip_crew) if trip_crew else flight_actor(trip["operator_id"])
         dep_i = dt.datetime.fromisoformat(legs[i - 1]["scheduled_departure"])
         arr_j = dt.datetime.fromisoformat(legs[j - 1]["scheduled_arrival"])
 

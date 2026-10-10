@@ -24,3 +24,8 @@ datagen-out/
 # OS
 .DS_Store
 Thumbs.db
+
+api/.smoke/
+*.tsbuildinfo
+ui/vite.config.d.ts
+ui/vite.config.js

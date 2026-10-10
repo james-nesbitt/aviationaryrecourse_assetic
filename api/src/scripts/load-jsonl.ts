@@ -5,7 +5,7 @@
  * Reads the JSONL files produced by assetic-datagen and inserts them
  * in dependency order: airports, aircraft_models, operators, vehicles,
  * ownership_history, staff, facilities, carrier_customers, routes,
- * vehicle_maintenance, route_assignments, route_operations, cargo,
+ * vehicle_maintenance, route_assignments, trips, crew_assignments, cargo,
  * orders, passengers, transit_events.
  */
 
@@ -134,10 +134,12 @@ async function loadAll(dir: string): Promise<void> {
       role: r.role as string,
       operatorId: r.operator_id as string,
       baseIata: r.base_iata as string,
+      dateOfBirth: toDate(r.date_of_birth),
       hireDate: toDate(r.hire_date),
       certifications: r.certifications ?? [],
       schemaVersion: r.schema_version as number,
       generatedAt: toDate(r.generated_at),
+      keycloakUsername: (r.keycloak_username as string) ?? null,
     })),
   });
 
@@ -225,18 +227,32 @@ async function loadAll(dir: string): Promise<void> {
     })),
   });
 
-  // ── Route operations ──────────────────────────────────────────────────
-  const operations = await readJsonl(join(dir, "route_operations.jsonl"));
-  console.log(`  route_operations: ${operations.length}`);
-  await prisma.routeOperation.createMany({
-    data: operations.map((r) => ({
-      operationId: r.operation_id as string,
+  // ── Trips (dated route instances) ─────────────────────────────────────
+  const trips = await readJsonl(join(dir, "trips.jsonl"));
+  console.log(`  trips: ${trips.length}`);
+  await prisma.trip.createMany({
+    data: trips.map((r) => ({
+      tripId: r.trip_id as string,
       routeId: r.route_id as string,
       vehicleId: r.vehicle_id as string,
       operatorId: r.operator_id as string,
       operatingDate: toDate(r.operating_date),
       status: r.status as string,
       legs: r.legs ?? [],
+      schemaVersion: r.schema_version as number,
+      generatedAt: toDate(r.generated_at),
+    })),
+  });
+
+  // ── Crew assignments ──────────────────────────────────────────────────
+  const crew = await readJsonl(join(dir, "crew_assignments.jsonl"));
+  console.log(`  crew_assignments: ${crew.length}`);
+  await prisma.crewAssignment.createMany({
+    data: crew.map((r) => ({
+      assignmentId: r.assignment_id as string,
+      tripId: r.trip_id as string,
+      staffId: r.staff_id as string,
+      crewRole: r.crew_role as string,
       schemaVersion: r.schema_version as number,
       generatedAt: toDate(r.generated_at),
     })),
@@ -253,7 +269,7 @@ async function loadAll(dir: string): Promise<void> {
       originIata: r.origin_iata as string,
       destinationIata: r.destination_iata as string,
       assignedVehicleId: (r.assigned_vehicle_id as string) ?? null,
-      operationId: (r.operation_id as string) ?? null,
+      tripId: (r.trip_id as string) ?? null,
       weightKg: r.weight_kg as number,
       cargoType: r.cargo_type as string,
       validTime: toDate(r.valid_time),
@@ -298,7 +314,7 @@ async function loadAll(dir: string): Promise<void> {
         familyName: r.family_name as string,
         passengerType: r.passenger_type as string,
         orderId: (r.order_id as string) ?? null,
-        operationId: (r.operation_id as string) ?? null,
+        tripId: (r.trip_id as string) ?? null,
         operatorId: r.operator_id as string,
         originIata: r.origin_iata as string,
         destinationIata: r.destination_iata as string,

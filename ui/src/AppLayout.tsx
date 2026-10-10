@@ -1,22 +1,63 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getUser, logout } from "./lib/auth.js";
+import { apiGet, type Me } from "./lib/api.js";
 
-const navItems = [
-  { to: "/", label: "Dashboard", end: true },
-  { to: "/vehicles", label: "Vehicles" },
-  { to: "/operators", label: "Operators" },
-  { to: "/orders", label: "Orders" },
-  { to: "/cargo", label: "Cargo" },
-  { to: "/routes", label: "Routes" },
-  { to: "/staff", label: "Staff" },
-  { to: "/customers", label: "Customers" },
-  { to: "/passengers", label: "Passengers" },
+/**
+ * Navigation is a short list of workspaces, not a table of contents.
+ *
+ *  - the admin panel is the entry point to every entity list and detail page,
+ *    and belongs to the platform-administrator roles
+ *  - Fleet and Operations are role dashboards; administrators see them too
+ *  - My Schedule is a person's own record, so it is gated on the caller
+ *    having a linked staff record rather than on a role: an administrator
+ *    holding the crew role but no staff row has no schedule to show
+ *
+ * Entity lists are reachable from the admin panel and by links from the
+ * dashboards, so they are deliberately absent here.
+ */
+const ADMIN_ROLES = ["asset_manager", "sysadmin"];
+
+type NavGate = "admin" | "staff" | { role: string };
+
+const navItems: { to: string; label: string; end?: boolean; gate: NavGate }[] = [
+  { to: "/", label: "Admin", end: true, gate: "admin" },
+  { to: "/fleet", label: "Fleet & Maintenance", gate: { role: "maintenance" } },
+  { to: "/operations", label: "Operations Control", gate: { role: "route_manager" } },
+  { to: "/accounts", label: "Accounts", gate: { role: "account_manager" } },
+  { to: "/my-trips", label: "My Schedule", gate: "staff" },
 ];
+
+export function visibleNavItems(roles: string[], hasStaffRecord: boolean): typeof navItems {
+  const isAdmin = roles.some((r) => ADMIN_ROLES.includes(r));
+  return navItems.filter((item) => {
+    if (item.gate === "admin") return isAdmin;
+    if (item.gate === "staff") return hasStaffRecord;
+    return isAdmin || roles.includes(item.gate.role);
+  });
+}
+
+/** Where a persona belongs when they land: their own workspace. */
+export function landingPath(roles: string[], hasStaffRecord: boolean): string {
+  if (roles.some((r) => ADMIN_ROLES.includes(r))) return "/";
+  if (roles.includes("maintenance")) return "/fleet";
+  if (roles.includes("route_manager")) return "/operations";
+  if (roles.includes("account_manager")) return "/accounts";
+  if (hasStaffRecord) return "/my-trips";
+  return "/";
+}
 
 export function AppLayout(): React.ReactElement {
   const user = getUser();
   const navigate = useNavigate();
+  const [me, setMe] = useState<Me | null>(null);
+
+  // The identity link decides whether this account has a schedule of its own.
+  useEffect(() => {
+    apiGet<Me>("/api/me")
+      .then(setMe)
+      .catch(() => setMe(null));
+  }, []);
 
   async function handleLogout(): Promise<void> {
     await logout();
@@ -36,7 +77,7 @@ export function AppLayout(): React.ReactElement {
       >
         <div style={{ padding: "0 1rem 1rem", fontSize: "1.5rem", fontWeight: 700 }}>assetic</div>
         <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {navItems.map((item) => (
+          {visibleNavItems(user?.roles ?? [], Boolean(me?.staff)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

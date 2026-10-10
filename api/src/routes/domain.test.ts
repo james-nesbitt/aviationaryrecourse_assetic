@@ -13,18 +13,26 @@ vi.mock("../lib/prisma.js", () => ({
       update: vi.fn(),
     },
     vehicle: { findMany: vi.fn(), findUnique: vi.fn() },
-    staff: { findMany: vi.fn() },
+    staff: { findMany: vi.fn(), findUnique: vi.fn() },
     carrierCustomer: { findMany: vi.fn() },
     cargo: { findMany: vi.fn() },
-    route: { findMany: vi.fn() },
+    route: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     asseticOrder: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     airport: { findMany: vi.fn() },
     aircraftModel: { findMany: vi.fn() },
     facility: { findMany: vi.fn() },
     passenger: { findUnique: vi.fn() },
     transitEvent: { findMany: vi.fn() },
-    routeOperation: { findMany: vi.fn(), findUnique: vi.fn() },
-    routeAssignment: { findMany: vi.fn() },
+    trip: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      count: vi.fn(),
+      createMany: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    crewAssignment: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
+    routeAssignment: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     vehicleMaintenance: { findMany: vi.fn() },
     $queryRaw: vi.fn(async () => []),
   },
@@ -66,7 +74,7 @@ function createMockApp(): MockApp {
   };
 }
 
-const mockUser = { sub: "123", username: "admin", roles: ["asset_manager", "trip_manager"], raw: {} };
+const mockUser = { sub: "123", username: "admin", roles: ["asset_manager", "route_manager"], raw: {} };
 
 describe("Domain routes", () => {
   let app: MockApp;
@@ -125,11 +133,11 @@ describe("Domain routes", () => {
   it("POST /api/operators requires asset_manager role", async () => {
     const route = app.routes.get("POST /api/operators");
     expect(route).toBeDefined();
-    const restrictedUser = { ...mockUser, roles: ["trip_manager"] };
+    const restrictedUser = { ...mockUser, roles: ["route_manager"] };
     await expect(route!.handler({ user: restrictedUser, body: {} })).rejects.toThrow();
   });
 
-  it("POST /api/orders requires trip_manager role", async () => {
+  it("POST /api/orders requires route_manager role", async () => {
     const route = app.routes.get("POST /api/orders");
     expect(route).toBeDefined();
     const restrictedUser = { ...mockUser, roles: ["loading_team"] };
@@ -165,10 +173,28 @@ describe("Domain routes", () => {
       "GET /api/vehicles",
       "GET /api/staff",
       "GET /api/customers",
+      "GET /api/customers/:id",
       "GET /api/cargo",
+      "GET /api/cargo/:id",
       "GET /api/routes",
-      "GET /api/route-operations",
-      "GET /api/route-operations/:id",
+      "GET /api/trips",
+      "GET /api/trips/:id",
+      "GET /api/trips/:id/crew",
+      "GET /api/routes/:id",
+      "GET /api/routes/:id/trips",
+      "GET /api/routes/:id/crew",
+      "GET /api/vehicles/:id/trips",
+      "GET /api/vehicles/:id/maintenance",
+      "GET /api/vehicles/:id/stats",
+      "GET /api/crew-assignments",
+      "GET /api/staff/fatigue",
+      "GET /api/staff/:id",
+      "GET /api/stats/fleet",
+      "GET /api/stats/locations",
+      "GET /api/airports/:id/activity",
+      "GET /api/accounts/overview",
+      "GET /api/stats/operations",
+      "GET /api/stats/crew",
       "GET /api/route-assignments",
       "GET /api/vehicle-maintenance",
       "GET /api/orders",
@@ -186,11 +212,11 @@ describe("Domain routes", () => {
     }
   });
 
-  it("GET /api/route-operations passes vehicleId and status filters to prisma", async () => {
-    const route = app.routes.get("GET /api/route-operations");
+  it("GET /api/trips passes vehicleId and status filters to prisma", async () => {
+    const route = app.routes.get("GET /api/trips");
     if (!route) throw new Error("route not registered");
     await route.handler({ query: { vehicleId: "veh-0001", status: "completed" } });
-    expect(prisma.routeOperation.findMany).toHaveBeenCalledWith(
+    expect(prisma.trip.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { vehicleId: "veh-0001", status: "completed" } }),
     );
   });
