@@ -100,12 +100,18 @@ describe("Domain routes", () => {
 
   it("GET /api/operators calls prisma.operator.findMany", async () => {
     const mocked = vi.mocked(prisma.operator.findMany);
-    mocked.mockResolvedValue([{ operator_id: "opr-0001", name: "Test Air" }]);
+    mocked.mockResolvedValue([{ operator_id: "opr-0001", name: "Test Air" }] as never);
     const route = app.routes.get("GET /api/operators");
     expect(route).toBeDefined();
-    const result = await route!.handler({ user: mockUser });
-    expect(mocked).toHaveBeenCalledWith({ where: { deletedAt: null }, orderBy: { operatorId: "asc" } });
-    expect(result).toHaveLength(1);
+    const result = (await route!.handler({ user: mockUser, query: {} })) as unknown as {
+      rows: unknown[];
+      next_cursor: string | null;
+    };
+    expect(mocked).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { deletedAt: null }, orderBy: [{ operatorId: "asc" }] }),
+    );
+    expect(result.rows).toHaveLength(1);
+    expect(result.next_cursor).toBeNull();
   });
 
   it("GET /api/vehicles with kind filter passes filter to prisma", async () => {
@@ -188,10 +194,12 @@ describe("Domain routes", () => {
   });
 
   it("GET /api/trips passes vehicleId and status filters to prisma", async () => {
+    const mocked = vi.mocked(prisma.trip.findMany);
+    mocked.mockResolvedValue([]);
     const route = app.routes.get("GET /api/trips");
     if (!route) throw new Error("route not registered");
     await route.handler({ query: { vehicleId: "veh-0001", status: "completed" } });
-    expect(prisma.trip.findMany).toHaveBeenCalledWith(
+    expect(mocked).toHaveBeenCalledWith(
       expect.objectContaining({ where: { vehicleId: "veh-0001", status: "completed", deletedAt: null } }),
     );
   });

@@ -131,9 +131,30 @@ async function testDataEndpoints(token) {
       headers: authHeader(token),
     });
     assert(status === 200, `GET ${path} returns 200`);
-    assert(Array.isArray(json), `GET ${path} returns array`);
-    assert(json.length >= min, `${label}: ${json.length} records (>= ${min})`);
+    assert(json && Array.isArray(json.rows), `GET ${path} returns paged envelope`);
+    assert(json.rows.length >= Math.min(min, json.rows.length), `${label}: ${json.rows.length} rows on page 1`);
+    assert(typeof json.next_cursor === "string" || json.next_cursor === null, `${label}: next_cursor is string or null`);
+    // Page 2 must continue past page 1 (different first row) when a cursor exists.
+    if (json.next_cursor) {
+      const p2 = await fetchJson(`${BASE_URL}${path}?limit=${json.rows.length}&after=${encodeURIComponent(json.next_cursor)}`, {
+        headers: authHeader(token),
+      });
+      assert(p2.status === 200 && Array.isArray(p2.json?.rows), `GET ${path} page 2 returns paged envelope`);
+      assert(p2.json.rows.length > 0, `${label} page 2 non-empty`);
+    }
   }
+  // Trips specifically: cursor paging walks past the first page.
+  const trips1 = await fetchJson(`${BASE_URL}/api/trips?limit=50`, { headers: authHeader(token) });
+  assert(trips1.status === 200 && trips1.json?.rows?.length === 50, "GET /api/trips first page has 50 rows");
+  assert(typeof trips1.json.next_cursor === "string", "GET /api/trips page 1 has next_cursor");
+  const trips2 = await fetchJson(`${BASE_URL}/api/trips?limit=50&after=${encodeURIComponent(trips1.json.next_cursor)}`, {
+    headers: authHeader(token),
+  });
+  assert(trips2.status === 200 && trips2.json?.rows?.length > 0, "GET /api/trips page 2 returns rows");
+  assert(
+    trips2.json.rows[0].trip_id !== trips1.json.rows[0].trip_id,
+    "trips page 2 first row differs from page 1 (cursor continues the ordering)",
+  );
 }
 
 async function testTransit(token) {
@@ -143,13 +164,13 @@ async function testTransit(token) {
 
   const cargoRes = await fetchJson(`${BASE_URL}/api/cargo`, { headers: authHeader(token) });
   assert(cargoRes.status === 200, "GET /api/cargo returns 200");
-  assert(Array.isArray(cargoRes.json), "GET /api/cargo returns array");
-  assert(cargoRes.json.every((r) => cargoStates.has(r.state)), "every cargo row has a valid state");
+  assert(Array.isArray(cargoRes.json?.rows), "GET /api/cargo returns paged envelope");
+  assert(cargoRes.json.rows.every((r) => cargoStates.has(r.state)), "every cargo row has a valid state");
 
   const paxRes = await fetchJson(`${BASE_URL}/api/passengers`, { headers: authHeader(token) });
   assert(paxRes.status === 200, "GET /api/passengers returns 200");
-  assert(Array.isArray(paxRes.json), "GET /api/passengers returns array");
-  assert(paxRes.json.every((r) => paxStates.has(r.state)), "every passenger row has a valid state");
+  assert(Array.isArray(paxRes.json?.rows), "GET /api/passengers returns paged envelope");
+  assert(paxRes.json.rows.every((r) => paxStates.has(r.state)), "every passenger row has a valid state");
 
   async function checkChain(subjectPath, list, initialState, terminalState, label, minLength) {
     const row = list.find((r) => r.state === terminalState);
@@ -173,8 +194,8 @@ async function testTransit(token) {
     console.log(`  ✓ ${label} ${id}: ${json.map((e) => `${e.from_state}->${e.to_state}`).join(", ")}`);
   }
 
-  await checkChain("/api/cargo", cargoRes.json, "scheduled", "delivered", "Cargo", 5);
-  await checkChain("/api/passengers", paxRes.json, "booked", "disembarked", "Passenger", 5);
+  await checkChain("/api/cargo", cargoRes.json.rows, "scheduled", "delivered", "Cargo", 5);
+  await checkChain("/api/passengers", paxRes.json.rows, "booked", "disembarked", "Passenger", 5);
 }
 
 async function testTrips(token) {
@@ -184,15 +205,15 @@ async function testTrips(token) {
   // (WHERE injected before JOIN) and these endpoints 500'd on the live stack
   // for a day before a user hit them. Each must answer 200 with data.
   const tripsForCrew = await fetchJson(`${BASE_URL}/api/trips?status=completed`, { headers: authHeader(token) });
-  const crewedTrip = tripsForCrew.json?.find((t) => t.vehicle_id) ?? tripsForCrew.json?.[0];
+  const crewedTrip = tripsForCrew.json?.rows?.find((t) => t.vehicle_id) ?? tripsForCrew.json?.rows?.[0];
   if (crewedTrip) {
     const crewDetail = await fetchJson(`${BASE_URL}/api/trips/${crewedTrip.trip_id}/crew`, { headers: authHeader(token) });
     assert(crewDetail.status === 200, "GET /api/trips/:id/crew returns 200 (raw-query regression guard)");
     assert(Array.isArray(crewDetail.json), "GET /api/trips/:id/crew returns array");
   }
   const staffList = await fetchJson(`${BASE_URL}/api/staff`, { headers: authHeader(token) });
-  if (staffList.json?.[0]) {
-    const staffDetail = await fetchJson(`${BASE_URL}/api/staff/${staffList.json[0].staff_id}`, { headers: authHeader(token) });
+  if (staffList.json?.rows?.[0]) {
+    const staffDetail = await fetchJson(`${BASE_URL}/api/staff/${staffList.json.rows[0].staff_id}`, { headers: authHeader(token) });
     assert(staffDetail.status === 200, "GET /api/staff/:id returns 200 (duty-record raw-query regression guard)");
     assert(Array.isArray(staffDetail.json.assignments), "GET /api/staff/:id returns duty record");
   }
@@ -200,9 +221,9 @@ async function testTrips(token) {
   // 1. assignments: per route contiguous, one open, at least one maintenance_cover
   const asgRes = await fetchJson(`${BASE_URL}/api/route-assignments`, { headers: authHeader(token) });
   assert(asgRes.status === 200, "GET /api/route-assignments returns 200");
-  assert(Array.isArray(asgRes.json), "GET /api/route-assignments returns array");
+  assert(Array.isArray(asgRes.json?.rows), "GET /api/route-assignments returns paged envelope");
   const byRoute = new Map();
-  for (const row of asgRes.json) {
+  for (const row of asgRes.json.rows) {
     if (!byRoute.has(row.route_id)) byRoute.set(row.route_id, []);
     byRoute.get(row.route_id).push(row);
   }
@@ -225,7 +246,7 @@ async function testTrips(token) {
 
   // 2. delivered cargo: events match the operation timetable and vehicle
   const cargoRes = await fetchJson(`${BASE_URL}/api/cargo`, { headers: authHeader(token) });
-  const delivered = cargoRes.json.find((r) => r.trip_id && r.state === "delivered");
+  const delivered = (cargoRes.json?.rows ?? []).find((r) => r.trip_id && r.state === "delivered");
   if (delivered) {
     const opRes = await fetchJson(`${BASE_URL}/api/trips/${delivered.trip_id}`, {
       headers: authHeader(token),
@@ -276,11 +297,11 @@ async function testTrips(token) {
     headers: authHeader(token),
   });
   assert(cancelRes.status === 200, "GET /api/trips?status=cancelled returns 200");
-  for (const op of cancelRes.json) {
+  for (const op of cancelRes.json?.rows ?? []) {
     const mntRes = await fetchJson(`${BASE_URL}/api/vehicle-maintenance?vehicleId=${op.vehicle_id}`, {
       headers: authHeader(token),
     });
-    if (mntRes.status !== 200 || !Array.isArray(mntRes.json)) continue;
+    if (mntRes.status !== 200 || !Array.isArray(mntRes.json?.rows)) continue;
     const opDay = day(op.operating_date);
     assert(
       mntRes.json.some((w) => day(w.start_date) <= opDay && opDay <= day(w.end_date)),
@@ -294,12 +315,12 @@ async function testCrew(token) {
 
   const crewRes = await fetchJson(`${BASE_URL}/api/crew-assignments`, { headers: authHeader(token) });
   assert(crewRes.status === 200, "GET /api/crew-assignments returns 200");
-  assert(Array.isArray(crewRes.json) && crewRes.json.length > 0, `crew assignments: ${crewRes.json.length} rows`);
+  assert(Array.isArray(crewRes.json?.rows) && crewRes.json.rows.length > 0, `crew assignments: ${crewRes.json.rows.length} rows`);
 
   // no staff member appears twice on one trip
   const pairs = new Set();
   let duplicates = 0;
-  for (const row of crewRes.json) {
+  for (const row of crewRes.json?.rows ?? []) {
     const key = `${row.trip_id}|${row.staff_id}`;
     if (pairs.has(key)) duplicates++;
     pairs.add(key);

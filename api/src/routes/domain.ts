@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/auth.js";
 import { completedYears } from "../lib/age.js";
+import { paginate, parsePage } from "../lib/pagination.js";
 import { pickFields, missingFields } from "../lib/pickFields.js";
 import { cached, invalidate, TTL } from "../lib/statsCache.js";
 import { fatigueLevel, tripDutyHours } from "../lib/fatigue.js";
@@ -32,8 +33,14 @@ export async function datasetAnchor(): Promise<{ anchorDate: Date; anchorAt: Dat
 
 export async function registerDomainRoutes(app: FastifyInstance): Promise<void> {
   // ── Operators ──────────────────────────────────────────────────────────
-  app.get("/api/operators", async () => {
-    return prisma.operator.findMany({ where: { deletedAt: null }, orderBy: { operatorId: "asc" } });
+  app.get("/api/operators", async (request) => {
+    const query = request.query as Record<string, string>;
+    return paginate(
+      (args) => prisma.operator.findMany(args),
+      { where: { deletedAt: null }, orderBy: [{ operatorId: "asc" }] },
+      parsePage(query),
+      ["operatorId"],
+    );
   });
 
   app.get("/api/operators/:id", async (request) => {
@@ -43,15 +50,20 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Vehicles ───────────────────────────────────────────────────────────
   app.get("/api/vehicles", async (request) => {
-    const query = request.query as { kind?: string; operatorId?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { kind?: string; operatorId?: string };
+    const where: { kind?: string; operatorId?: string; deletedAt?: null } = {};
     if (query.kind) where.kind = query.kind;
     if (query.operatorId) where.operatorId = query.operatorId;
-    return prisma.vehicle.findMany({
-      where: { ...where, deletedAt: null },
-      include: { model: true, operator: true },
-      orderBy: { vehicleId: "asc" },
-    });
+    return paginate(
+      (args) => prisma.vehicle.findMany(args),
+      {
+        where: { ...where, deletedAt: null },
+        include: { model: true, operator: true },
+        orderBy: [{ vehicleId: "asc" }],
+      },
+      parsePage(query),
+      ["vehicleId"],
+    );
   });
 
   app.get("/api/vehicles/:id", async (request) => {
@@ -64,31 +76,43 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Staff ──────────────────────────────────────────────────────────────
   app.get("/api/staff", async (request) => {
-    const query = request.query as { operatorId?: string; role?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { operatorId?: string; role?: string };
+    const where: { operatorId?: string; role?: string; deletedAt?: null } = {};
     if (query.operatorId) where.operatorId = query.operatorId;
     if (query.role) where.role = query.role;
-    const [rows, { anchorDate }] = await Promise.all([
-      prisma.staff.findMany({
-        where: { ...where, deletedAt: null },
-        include: { operator: true },
-        orderBy: { staffId: "asc" },
-      }),
+    const page = parsePage(query);
+    const [staffPage, { anchorDate }] = await Promise.all([
+      paginate(
+        (args) => prisma.staff.findMany(args),
+        {
+          where: { ...where, deletedAt: null },
+          include: { operator: true },
+          orderBy: [{ staffId: "asc" }],
+        },
+        page,
+        ["staffId"],
+      ),
       datasetAnchor(),
     ]);
-    return rows.map((row) => ({
-      ...row,
-      age: completedYears(row.dateOfBirth, anchorDate),
-      yearsOfService: completedYears(row.hireDate, anchorDate),
-    }));
+    return {
+      rows: staffPage.rows.map((row) => ({
+        ...row,
+        age: completedYears(row.dateOfBirth, anchorDate),
+        yearsOfService: completedYears(row.hireDate, anchorDate),
+      })),
+      next_cursor: staffPage.next_cursor,
+    };
   });
 
   // ── Customers ──────────────────────────────────────────────────────────
-  app.get("/api/customers", async () => {
-    return prisma.carrierCustomer.findMany({
-      include: { operator: true },
-      orderBy: { customerId: "asc" },
-    });
+  app.get("/api/customers", async (request) => {
+    const query = request.query as Record<string, string>;
+    return paginate(
+      (args) => prisma.carrierCustomer.findMany(args),
+      { include: { operator: true }, orderBy: [{ customerId: "asc" }] },
+      parsePage(query),
+      ["customerId"],
+    );
   });
 
   app.get("/api/customers/:id", async (request) => {
@@ -134,33 +158,41 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Routes ─────────────────────────────────────────────────────────────
   app.get("/api/routes", async (request) => {
-    const query = request.query as { operatorId?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { operatorId?: string };
+    const where: { operatorId?: string; deletedAt?: null } = {};
     if (query.operatorId) where.operatorId = query.operatorId;
-    return prisma.route.findMany({
-      where: { ...where, deletedAt: null },
-      include: { operator: true },
-      orderBy: { routeId: "asc" },
-    });
+    return paginate(
+      (args) => prisma.route.findMany(args),
+      {
+        where: { ...where, deletedAt: null },
+        include: { operator: true },
+        orderBy: [{ routeId: "asc" }],
+      },
+      parsePage(query),
+      ["routeId"],
+    );
   });
 
   // ── Trips (dated route instances) ──────────────────────────────────────
   app.get("/api/trips", async (request) => {
-    const query = request.query as {
+    const query = request.query as Record<string, string> & {
       routeId?: string;
       vehicleId?: string;
       operatorId?: string;
       status?: string;
     };
-    const where: Record<string, unknown> = {};
+    const where: { routeId?: string; vehicleId?: string; operatorId?: string; status?: string; deletedAt?: null } = {};
     if (query.routeId) where.routeId = query.routeId;
     if (query.vehicleId) where.vehicleId = query.vehicleId;
     if (query.operatorId) where.operatorId = query.operatorId;
     if (query.status) where.status = query.status;
-    return prisma.trip.findMany({
-      where: { ...where, deletedAt: null },
-      orderBy: [{ operatingDate: "asc" }, { routeId: "asc" }],
-    });
+    const page = parsePage(query);
+    return paginate(
+      (args) => prisma.trip.findMany(args),
+      { where: { ...where, deletedAt: null }, orderBy: [{ operatingDate: "asc" }, { routeId: "asc" }] },
+      page,
+      ["operatingDate", "routeId"],
+    );
   });
 
   app.get("/api/trips/:id", async (request) => {
@@ -182,26 +214,30 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Route assignments ──────────────────────────────────────────────────
   app.get("/api/route-assignments", async (request) => {
-    const query = request.query as { routeId?: string; vehicleId?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { routeId?: string; vehicleId?: string };
+    const where: { routeId?: string; vehicleId?: string; deletedAt?: null } = {};
     if (query.routeId) where.routeId = query.routeId;
     if (query.vehicleId) where.vehicleId = query.vehicleId;
-    return prisma.routeAssignment.findMany({
-      where: { ...where, deletedAt: null },
-      orderBy: [{ routeId: "asc" }, { validFrom: "asc" }],
-    });
+    return paginate(
+      (args) => prisma.routeAssignment.findMany(args),
+      { where: { ...where, deletedAt: null }, orderBy: [{ routeId: "asc" }, { validFrom: "asc" }] },
+      parsePage(query),
+      ["routeId", "validFrom"],
+    );
   });
 
   // ── Vehicle maintenance ────────────────────────────────────────────────
   app.get("/api/vehicle-maintenance", async (request) => {
-    const query = request.query as { vehicleId?: string; status?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { vehicleId?: string; status?: string };
+    const where: { vehicleId?: string; status?: string; deletedAt?: null } = {};
     if (query.vehicleId) where.vehicleId = query.vehicleId;
     if (query.status) where.status = query.status;
-    return prisma.vehicleMaintenance.findMany({
-      where: { ...where, deletedAt: null },
-      orderBy: [{ vehicleId: "asc" }, { startDate: "asc" }],
-    });
+    return paginate(
+      (args) => prisma.vehicleMaintenance.findMany(args),
+      { where: { ...where, deletedAt: null }, orderBy: [{ vehicleId: "asc" }, { startDate: "asc" }] },
+      parsePage(query),
+      ["vehicleId", "startDate"],
+    );
   });
 
   // ── Route detail (route manager) ───────────────────────────────────────
@@ -314,14 +350,16 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Crew assignments and fatigue ───────────────────────────────────────
   app.get("/api/crew-assignments", async (request) => {
-    const query = request.query as { tripId?: string; staffId?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { tripId?: string; staffId?: string };
+    const where: { tripId?: string; staffId?: string; deletedAt?: null } = {};
     if (query.tripId) where.tripId = query.tripId;
     if (query.staffId) where.staffId = query.staffId;
-    return prisma.crewAssignment.findMany({
-      where: { ...where, deletedAt: null },
-      orderBy: [{ tripId: "asc" }, { crewRole: "asc" }],
-    });
+    return paginate(
+      (args) => prisma.crewAssignment.findMany(args),
+      { where: { ...where, deletedAt: null }, orderBy: [{ tripId: "asc" }, { crewRole: "asc" }] },
+      parsePage(query),
+      ["tripId", "crewRole"],
+    );
   });
 
   app.get("/api/staff/fatigue", async (request, reply) => {
@@ -605,15 +643,20 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
 
   // ── Orders ─────────────────────────────────────────────────────────────
   app.get("/api/orders", async (request) => {
-    const query = request.query as { status?: string; operatorId?: string };
-    const where: Record<string, unknown> = {};
+    const query = request.query as Record<string, string> & { status?: string; operatorId?: string };
+    const where: { status?: string; operatorId?: string; deletedAt?: null } = {};
     if (query.status) where.status = query.status;
     if (query.operatorId) where.operatorId = query.operatorId;
-    return prisma.asseticOrder.findMany({
-      where: { ...where, deletedAt: null },
-      include: { customer: true, operator: true },
-      orderBy: { orderId: "asc" },
-    });
+    return paginate(
+      (args) => prisma.asseticOrder.findMany(args),
+      {
+        where: { ...where, deletedAt: null },
+        include: { customer: true, operator: true },
+        orderBy: [{ orderId: "asc" }],
+      },
+      parsePage(query),
+      ["orderId"],
+    );
   });
 
   app.get("/api/orders/:id", async (request) => {
@@ -625,21 +668,36 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
   });
 
   // ── Airports (reference) ───────────────────────────────────────────────
-  app.get("/api/airports", async () => {
-    return prisma.airport.findMany({ where: { deletedAt: null }, orderBy: { iata: "asc" } });
+  app.get("/api/airports", async (request) => {
+    const query = request.query as Record<string, string>;
+    return paginate(
+      (args) => prisma.airport.findMany(args),
+      { where: { deletedAt: null }, orderBy: [{ iata: "asc" }] },
+      parsePage(query),
+      ["iata"],
+    );
   });
 
   // ── Aircraft models (reference) ────────────────────────────────────────
-  app.get("/api/aircraft-models", async () => {
-    return prisma.aircraftModel.findMany({ where: { deletedAt: null }, orderBy: { modelId: "asc" } });
+  app.get("/api/aircraft-models", async (request) => {
+    const query = request.query as Record<string, string>;
+    return paginate(
+      (args) => prisma.aircraftModel.findMany(args),
+      { where: { deletedAt: null }, orderBy: [{ modelId: "asc" }] },
+      parsePage(query),
+      ["modelId"],
+    );
   });
 
   // ── Facilities ─────────────────────────────────────────────────────────
-  app.get("/api/facilities", async () => {
-    return prisma.facility.findMany({
-      include: { operator: true },
-      orderBy: { facilityId: "asc" },
-    });
+  app.get("/api/facilities", async (request) => {
+    const query = request.query as Record<string, string>;
+    return paginate(
+      (args) => prisma.facility.findMany(args),
+      { include: { operator: true }, orderBy: [{ facilityId: "asc" }] },
+      parsePage(query),
+      ["facilityId"],
+    );
   });
 
   // ── Route writes (require route_manager role) ──────────────────────────

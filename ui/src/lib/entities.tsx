@@ -46,7 +46,6 @@ export interface EntitySpec {
   detailLabel?: string;
   filters?: EntityFilter[];
   /** Cap rows rendered; the large tables are sampled rather than paged. */
-  limit?: number;
 }
 
 const str = (row: Row, key: string): string => (row[key] == null ? "—" : String(row[key]));
@@ -154,7 +153,6 @@ export const ENTITIES: EntitySpec[] = [
     blurb: "Dated instances of a route",
     rowKey: (r) => str(r, "trip_id"),
     detailPath: (r) => `/trips/${str(r, "trip_id")}`,
-    limit: 200,
     columns: [
       { key: "id", header: "Trip", render: (r) => str(r, "trip_id") },
       { key: "date", header: "Date", render: (r) => formatDate(str(r, "operating_date")) },
@@ -237,7 +235,6 @@ export const ENTITIES: EntitySpec[] = [
     rowKey: (r) => str(r, "assignment_id"),
     detailPath: (r) => `/trips/${str(r, "trip_id")}`,
     detailLabel: "Trip",
-    limit: 200,
     columns: [
       { key: "trip", header: "Trip", render: (r) => str(r, "trip_id") },
       { key: "staff", header: "Staff", render: (r) => str(r, "staff_id") },
@@ -390,7 +387,6 @@ export const ENTITIES: EntitySpec[] = [
     blurb: "Travellers and their journey state",
     rowKey: (r) => str(r, "passenger_id"),
     detailPath: (r) => `/passengers/${str(r, "passenger_id")}`,
-    limit: 200,
     columns: [
       { key: "name", header: "Passenger", render: (r) => `${str(r, "given_name")} ${str(r, "family_name")}` },
       { key: "route", header: "Route", render: (r) => `${str(r, "origin_iata")} → ${str(r, "destination_iata")}` },
