@@ -188,7 +188,7 @@ spec:
             name: assetic-api-source
         - name: migrations
           configMap:
-            name: assetic-db-migrations
+            name: assetic-db-migrations-v2
         - name: datagen
           configMap:
             name: assetic-datagen-data
