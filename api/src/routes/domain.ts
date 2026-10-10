@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/auth.js";
+import { completedYears } from "../lib/age.js";
 import { cached, invalidate, TTL } from "../lib/statsCache.js";
 import { fatigueLevel, tripDutyHours } from "../lib/fatigue.js";
 import { operatingDates, shiftLegs, tripStatus, type RouteLeg } from "../lib/trips.js";
@@ -66,11 +67,19 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     const where: Record<string, unknown> = {};
     if (query.operatorId) where.operatorId = query.operatorId;
     if (query.role) where.role = query.role;
-    return prisma.staff.findMany({
-      where,
-      include: { operator: true },
-      orderBy: { staffId: "asc" },
-    });
+    const [rows, { anchorDate }] = await Promise.all([
+      prisma.staff.findMany({
+        where,
+        include: { operator: true },
+        orderBy: { staffId: "asc" },
+      }),
+      datasetAnchor(),
+    ]);
+    return rows.map((row) => ({
+      ...row,
+      age: completedYears(row.dateOfBirth, anchorDate),
+      yearsOfService: completedYears(row.hireDate, anchorDate),
+    }));
   });
 
   // ── Customers ──────────────────────────────────────────────────────────
@@ -339,7 +348,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
       include: { operator: true },
     });
     if (!staff) return null;
-    const [assignments, fatigue] = await Promise.all([
+    const [assignments, fatigue, { anchorDate }] = await Promise.all([
       prisma.$queryRaw`
         SELECT ca.assignment_id, ca.crew_role, t.trip_id, t.route_id,
                t.operating_date, t.status, t.vehicle_id, t.legs
@@ -349,9 +358,12 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
         ORDER BY t.operating_date DESC
       `,
       prisma.$queryRaw`SELECT * FROM crew_fatigue_v WHERE staff_id = ${id}`,
+      datasetAnchor(),
     ]);
     return {
       ...staff,
+      age: completedYears(staff.dateOfBirth, anchorDate),
+      yearsOfService: completedYears(staff.hireDate, anchorDate),
       assignments,
       fatigue: (fatigue as unknown[])[0] ?? null,
     };

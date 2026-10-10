@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, type FatigueRow, type TripLeg } from "../../lib/api.js";
-import { Badge, DataTable, DetailHeader, DetailTabs, Section, StatCard } from "../../components/index.jsx";
+import { Badge, DataTable, DetailHeader, DetailTabs, FieldGrid, Section, StatCard } from "../../components/index.jsx";
 import { formatDate, formatHours, legChain, tripHours } from "../../lib/format.js";
 
 interface StaffAssignment {
@@ -22,6 +22,9 @@ interface StaffDetail {
   role_class: string;
   operator_id: string;
   base_iata: string;
+  date_of_birth: string;
+  age: number;
+  years_of_service: number;
   hire_date: string;
   certifications: string[];
   keycloak_username: string | null;
@@ -75,11 +78,17 @@ export function StaffDetailPage(): React.ReactElement {
         tabs={[
           { key: "overview", label: "Overview", render: () => (<>
       <Section title="Details">
-        <div style={{ fontSize: "0.9rem", color: "#444" }}>
-          <div>Hired: {formatDate(staff.hire_date)}</div>
-          <div>Certifications: {staff.certifications?.join(", ") || "—"}</div>
-          <div>Login: {staff.keycloak_username ?? "not linked"}</div>
-        </div>
+        <FieldGrid
+          fields={[
+            { label: "Age", value: staff.age },
+            { label: "Date of birth", value: formatDate(staff.date_of_birth) },
+            { label: "Hired", value: formatDate(staff.hire_date) },
+            { label: "Years of service", value: staff.years_of_service },
+            { label: "Base", value: staff.base_iata },
+            { label: "Certifications", value: staff.certifications?.join(", ") || "—" },
+            { label: "Login", value: staff.keycloak_username ?? "not linked" },
+          ]}
+        />
       </Section>
 
           </>) },

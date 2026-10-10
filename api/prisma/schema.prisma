@@ -108,6 +108,7 @@ model Staff {
   role           String
   operatorId     String   @map("operator_id")
   baseIata       String   @map("base_iata") @db.Char(3)
+  dateOfBirth    DateTime @map("date_of_birth") @db.Date
   hireDate       DateTime @map("hire_date") @db.Date
   certifications Json     @default("[]")
   schemaVersion  Int      @default(1) @map("schema_version")

@@ -82,6 +82,7 @@ spec:
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/004_location_tracking.sql
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/005_route_recurrence.sql
               psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/006_trips_crew.sql
+              psql "$PSQL_URL" -v ON_ERROR_STOP=1 -f /migrations/007_staff_date_of_birth.sql
               echo "Migrations applied."
 
               # Load data from datagen JSONL

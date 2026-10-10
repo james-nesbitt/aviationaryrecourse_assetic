@@ -134,6 +134,7 @@ async function loadAll(dir: string): Promise<void> {
       role: r.role as string,
       operatorId: r.operator_id as string,
       baseIata: r.base_iata as string,
+      dateOfBirth: toDate(r.date_of_birth),
       hireDate: toDate(r.hire_date),
       certifications: r.certifications ?? [],
       schemaVersion: r.schema_version as number,

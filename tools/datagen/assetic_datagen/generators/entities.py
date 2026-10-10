@@ -22,6 +22,22 @@ SCHEMA_VERSION = 1
 # anchor + FUTURE_DAYS.
 FUTURE_DAYS = 14
 
+# Minimum and maximum age at which each role is hired. Captains and leads carry
+# command experience so they enter later; ramp roles enter earliest. Used to
+# derive each staff member's date of birth from their hire date.
+HIRE_AGE_BANDS: dict[str, tuple[int, int]] = {
+    "captain": (28, 52),
+    "first_officer": (22, 42),
+    "cabin_lead": (26, 48),
+    "cabin_crew": (20, 40),
+    "maintenance_tech": (22, 52),
+    "ramp_agent": (19, 45),
+    "baggage_handler": (19, 45),
+    "fueler": (19, 45),
+    "account_manager": (26, 52),
+    "route_manager": (26, 52),
+}
+
 # Registration prefixes plausible for each operator home country.
 _REG_PREFIX_BY_COUNTRY = {
     "United States": "N",
@@ -277,6 +293,16 @@ def generate_staff(
         given = rng.choice(pools["given_names"])
         family = rng.choice(pools["family_names"])
         staff_id = ids.next("sta")
+        hire_date = random_date_in_window(rng, window_start(anchor, window_days), anchor)
+        # Date of birth is derived backwards from the hire date using the role's
+        # minimum entry age, so the dataset can never hire someone below it. Age
+        # itself is not stored: it is a function of the instant you ask, and the
+        # dataset is read at a fixed anchor.
+        low, high = HIRE_AGE_BANDS[role]
+        age_at_hire = rng.randint(low, high)
+        date_of_birth = hire_date - dt.timedelta(
+            days=round(age_at_hire * 365.25) + rng.randint(0, 364)
+        )
         rec = {
             "staff_id": staff_id,
             "given_name": given,
@@ -285,7 +311,8 @@ def generate_staff(
             "role": role,
             "operator_id": op["operator_id"],
             "base_iata": _airport_near(rng, airports, op["hub_iata"])["iata"],
-            "hire_date": iso(random_date_in_window(rng, window_start(anchor, window_days), anchor)),
+            "date_of_birth": iso(date_of_birth),
+            "hire_date": iso(hire_date),
             "certifications": sorted(certs),
             "schema_version": SCHEMA_VERSION,
             "generated_at": iso(anchor),
