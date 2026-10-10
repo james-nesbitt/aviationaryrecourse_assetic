@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireRole } from "../lib/auth.js";
 import { completedYears } from "../lib/age.js";
+import { pickFields, missingFields } from "../lib/pickFields.js";
 import { cached, invalidate, TTL } from "../lib/statsCache.js";
 import { fatigueLevel, tripDutyHours } from "../lib/fatigue.js";
 import { operatingDates, shiftLegs, tripStatus, type RouteLeg } from "../lib/trips.js";
@@ -640,11 +641,32 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     });
   });
 
-  // ── Write endpoints (require asset_manager role) ───────────────────────
+  // ── Write endpoints ────────────────────────────────────────────────────
+  // Every write picks its mutable fields explicitly: a request body can
+  // only set what the endpoint's contract names. schema_version and
+  // generated_at are datagen provenance and never client-settable.
+  const OPERATOR_FIELDS = ["operator_id", "name", "type", "country", "hub_iata", "founded_year", "fleet_size_hint"] as const;
+  const OPERATOR_MUTABLE_FIELDS = ["name", "type", "country", "hub_iata", "founded_year", "fleet_size_hint"] as const;
+  const ORDER_FIELDS = ["order_id", "customer_id", "operator_id", "order_type", "account_manager_id", "trip_manager_id", "origin_iata", "destination_iata", "planned_legs", "transit_route_ids", "ordered_on", "status", "passenger_group", "freight"] as const;
+  const ORDER_MUTABLE_FIELDS = ["order_type", "account_manager_id", "trip_manager_id", "origin_iata", "destination_iata", "planned_legs", "transit_route_ids", "ordered_on", "status", "passenger_group", "freight"] as const;
+  const OPERATOR_REQUIRED = ["operator_id", "name", "type", "country", "hub_iata", "founded_year"] as const;
+  const ORDER_REQUIRED = ["order_id", "customer_id", "operator_id", "order_type", "origin_iata", "destination_iata", "ordered_on"] as const;
+
   app.post("/api/operators", async (request, reply) => {
     requireRole(request.user!, "asset_manager");
     const body = request.body as Record<string, unknown>;
-    return prisma.operator.create({ data: body as never });
+    const missing = missingFields(body, OPERATOR_REQUIRED);
+    if (missing.length > 0) {
+      return reply.code(400).send({ error: "missing_fields", fields: missing });
+    }
+    const { anchorDate } = await datasetAnchor();
+    return prisma.operator.create({
+      data: {
+        ...(pickFields(body, OPERATOR_FIELDS) as { operatorId: string; name: string; type: string; country: string; hubIata: string; foundedYear: number }),
+        fleetSizeHint: (body.fleet_size_hint as number | undefined) ?? 0,
+        generatedAt: anchorDate,
+      },
+    });
   });
 
   app.patch("/api/operators/:id", async (request) => {
@@ -653,14 +675,29 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     const body = request.body as Record<string, unknown>;
     return prisma.operator.update({
       where: { operatorId: id },
-      data: body as never,
+      data: pickFields(body, OPERATOR_MUTABLE_FIELDS),
     });
   });
 
-  app.post("/api/orders", async (request) => {
+  app.post("/api/orders", async (request, reply) => {
     requireRole(request.user!, "route_manager");
     const body = request.body as Record<string, unknown>;
-    return prisma.asseticOrder.create({ data: body as never });
+    const missing = missingFields(body, ORDER_REQUIRED);
+    if (missing.length > 0) {
+      return reply.code(400).send({ error: "missing_fields", fields: missing });
+    }
+    const { anchorDate } = await datasetAnchor();
+    return prisma.asseticOrder.create({
+      data: {
+        ...(pickFields(body, ORDER_FIELDS) as {
+          orderId: string; customerId: string; operatorId: string;
+          orderType: string; originIata: string; destinationIata: string; orderedOn: Date;
+        }),
+        plannedLegs: (body.planned_legs as object[] | undefined) ?? [],
+        status: (body.status as string | undefined) ?? "requested",
+        generatedAt: anchorDate,
+      },
+    });
   });
 
   app.patch("/api/orders/:id", async (request) => {
@@ -669,7 +706,7 @@ export async function registerDomainRoutes(app: FastifyInstance): Promise<void> 
     const body = request.body as Record<string, unknown>;
     return prisma.asseticOrder.update({
       where: { orderId: id },
-      data: body as never,
+      data: pickFields(body, ORDER_MUTABLE_FIELDS),
     });
   });
 

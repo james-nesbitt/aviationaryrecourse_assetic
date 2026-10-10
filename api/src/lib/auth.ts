@@ -21,6 +21,13 @@ const JWKS = createRemoteJWKSet(jwksUrl);
 
 const expectedIssuer = `${keycloakUrl}/realms/${realm}`;
 
+// The API is the audience of every token it accepts. Keycloak mints
+// "account" for all clients plus each client's own id via the audience
+// protocol mapper on the assetic-ui client (realm-import.json), so a
+// UI-issued token carries both; a token minted for any other client the
+// realm ever grows is rejected here.
+const API_CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID ?? "assetic-api";
+
 export interface AsseticUser {
   sub: string;
   username: string;
@@ -32,6 +39,7 @@ export interface AsseticUser {
 export async function verifyToken(token: string): Promise<AsseticUser> {
   const { payload } = await jwtVerify(token, JWKS, {
     issuer: expectedIssuer,
+    audience: API_CLIENT_ID,
   });
 
   const realmAccess = payload.realm_access as { roles?: string[] } | undefined;

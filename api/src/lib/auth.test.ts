@@ -101,6 +101,24 @@ describe("JWT token structure", () => {
     expect(payload.realm_access).toEqual({ roles: ["asset_manager", "trip_manager"] });
   });
 
+  it("a token minted for a different audience fails verification", async () => {
+    const key = await getTestKey();
+    const token = await new jose.SignJWT({ sub: "other-client-user" })
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuer(TEST_ISSUER)
+      .setAudience("some-other-client")
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(key);
+
+    const pubKey = (getTestKey as unknown as { publicKey: jose.KeyLike }).publicKey;
+    // The API verifies with audience: "assetic-api" — a token whose aud is
+    // another client must be rejected even though the signature and issuer are valid.
+    await expect(
+      jose.jwtVerify(token, pubKey, { issuer: TEST_ISSUER, audience: TEST_AUDIENCE }),
+    ).rejects.toThrow();
+  });
+
   it("expired token fails verification", async () => {
     const key = await getTestKey();
     const token = await new jose.SignJWT({ sub: "expired" })
